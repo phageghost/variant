@@ -46,9 +46,10 @@ def convert_vcf_to_maf(vcf,
                        n_anns=1,
                        maf_filepath=None):
     """
-
+    .VCF ==> .MAF.
     :param vcf: DataFrame or str;
-    :param ensg_to_entrez: str; Filepath to a mapping compression (ENSG ID<\t>Entrez ID)
+    :param ensg_to_entrez: str; File path to a mapping compression
+    (ENSG ID<\t>Entrez ID)
     :param sample_name:
     :param n_anns: int;
     :param maf_filepath: str; filepath to MAF.
@@ -179,7 +180,7 @@ def get_variant_type(vcf_data):
     """
 
     :param vcf_data: DataFrame;
-    :return: list; list of lists which contain
+    :return: Series;
     """
 
     def f(vcf_row):
@@ -248,7 +249,8 @@ def get_allelic_frequencies(vcf_data, sample_iloc=9, join=True):
     :param vcf_data: DataFrame;
     :param sample_iloc: int;
     :param join: bool;
-    :return: list; list of lists, or str if join=True, containing allelic frequencies for a sample
+    :return: list; of lists, or str if join=True, containing allelic
+    frequencies for a sample
     """
 
     def f(vcf_row):
@@ -790,6 +792,7 @@ class Variants:
         Destructor. Close HDF5.
         :return: None
         """
+
         if self.hdf5:
             print('Closing HDF5 ...')
             self.hdf5.close()
@@ -801,11 +804,14 @@ class Variants:
         :param vcf_rsid_index_file_path: str;
         :return: None
         """
+
         start_time = datetime.datetime.now()
+
         print('Saving rsid index to {}...'.format(vcf_rsid_index_file_path))
         with gzip.open(vcf_rsid_index_file_path, 'wb') as index_file:
             pickle.dump(
                 self.rsid_index, index_file, protocol=-1, fix_imports=True)
+
         print('\tDone in {}'.format(datetime.datetime.now() - start_time))
 
     def _load_rsid_index(self, vcf_rsid_index_file_path):
@@ -814,6 +820,7 @@ class Variants:
         :param vcf_rsid_index_file_path: str;
         :return: None
         """
+
         start_time = datetime.datetime.now()
         print('Loading rsid index from {}...'.format(vcf_rsid_index_file_path))
         with gzip.open(vcf_rsid_index_file_path, 'rb') as index_file:
@@ -824,6 +831,7 @@ class Variants:
         """
         Generate internal data structures from VCF file and cache them to disk for future reference.
         """
+
         start_time = datetime.datetime.now()
         print('Parsing VCF and building variant HDF5 ...')
 
@@ -921,6 +929,7 @@ class Variants:
             7 - Histocompatibility, and
             255 - Other".
         """
+
         # Split up multiple entries in rsid field (if present)
         primary_key_field = list(self.vcf_field_model['primary_key'].keys())[0]
         primary_key_pos, primary_key_parse_func = self.vcf_field_model[
@@ -1012,6 +1021,7 @@ class Variants:
         Converts a tuple of variant information as output from a PyTables query, and returns a dictionary
         of field-value pairs. Bytes will be converted to strings as appropriate.
         """
+
         variant_dict = {}
         for key, value in zip(col_names, variant_tuple):
             try:
@@ -1029,24 +1039,31 @@ class Variants:
         Return a dictionary of variant attributes for the variant matching <rsid>.
         If <rsid> is not found, return None.
         """
+
         if rsid in self.rsid_index:
             contig = self.rsid_index[rsid]
 
             query_string = '(rsid == {})'.format(rsid.encode())
+
             if allow_snps and allow_indels:
                 pass
+
             elif allow_snps:
                 query_string += ' & (is_snp == True)'
+
             else:
                 query_string += ' & (is_snp == False)'
+
             print('Query: {}'.format(query_string))
 
             table = self.variant_group._f_get_child(
                 'contig_{}_variants'.format(contig))
+
             query_results = table.read_where(query_string)
 
             if len(query_results) > 0:
                 return self._tuple_to_dict(query_results[0], table.colnames)
+
         return None
 
     def get_variants_by_location(self,
@@ -1077,6 +1094,7 @@ class Variants:
          names to tuple indices.
         :return:
         """
+
         start_time = datetime.datetime.now()
         print(
             'Finding all variants of in contig {} ({},{}) with quality > {}, SNPS: {}, Indels: {}...'.
@@ -1178,6 +1196,7 @@ class Variants:
         :param fields: Which fields will be included as columns in the result
         :return:
         """
+
         start_time = datetime.datetime.now()
         print(
             'Finding all variants of in contig {} ({},{}) with quality > {}, SNPS: {}, Indels: {}...'.
