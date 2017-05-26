@@ -1,5 +1,17 @@
 from re import split
 
+VCF_COLUMNS = [
+    'CHROM',
+    'POS',
+    'ID',
+    'REF',
+    'ALT',
+    'QUAL',
+    'FILTER'
+    'INFO',
+    'FORMAT',
+]
+
 ANN_FIELDS = [
     'ALT',
     'effect',
@@ -110,120 +122,116 @@ MUTATION_EFFECT_RANKING = [
 # ==============================================================================
 #  Function on .VCF row
 # ==============================================================================
-def parse_vcf_row(vcf_row, n_anns=1):
+def parse_vcf_row(vcf_row):
     """
     Parse .VCF row and make a variant dict.
     :param vcf_row: iterable;
-    :param n_anns: int; number of ANNs to parse
     :return: dict; variant dict; won't have missing non-main field
     """
 
-    # TODO: Elegantify
+    # CHROM, ID, REF, ALT, QUAL, FILTER
     variant_dict = {
-        'CHROM': cast_vcf_field_value('CHROM', vcf_row[0]),
-        'POS': cast_vcf_field_value('POS', vcf_row[1]),
-        'ID': cast_vcf_field_value('ID', vcf_row[2]),
-        'REF': cast_vcf_field_value('REF', vcf_row[3]),
-        'ALT': cast_vcf_field_value('ALT', vcf_row[4]),
-        'QUAL': cast_vcf_field_value('QUAL', vcf_row[5]),
-        'FILTER': cast_vcf_field_value('FILTER', vcf_row[6]),
+        field: cast_vcf_field_value(field, vcf_row[i])
+        for (i, field) in enumerate(VCF_COLUMNS[:7])
     }
 
     ref = variant_dict['REF']
     alt = variant_dict['ALT']
 
     # Variant type
-    if alt and alt != '.':
-        variant_dict['variant_type'] = get_variant_type(variant_dict['REF'],
-                                                        alt)
+    variant_dict['variant_type'] = get_variant_type(ref, alt)
+
+    # INFO
+    for info in vcf_row[7].split(';'):
+        field, value = info.split('=')
+
+        if field == 'ANN':
+            # Use 1st ANN
+            a = value.split(',')[0].split('|')
+            variant_dict['ANN'] = {ANN_FIELDS[i]: a[i] for i in range(1, 15)}
+
+        else:
+            variant_dict[field] = cast_vcf_field_value(field, value)
+
+    # FORMAT
+    format_ = vcf_row[8]
+    format_split = format_.split(':')
 
     # Samples
     variant_dict['samples'] = []
-    format_split = vcf_row[8].split(':')
-    for i, s in enumerate(vcf_row[9:]):
-        s_d = {'sample_id': i + 1}
+    for i, sample in enumerate(vcf_row[9:]):
 
-        # Sample
-        for format_field, sample_value in zip(format_split, s.split(':')):
-            s_d[format_field] = cast_vcf_field_value(format_field,
-                                                     sample_value)
+        # Each sample is a dict
+        sample_dict = {'sample_id': i + 1}
+
+        for field, value in zip(format_split, sample.split(':')):
+            sample_dict[field] = cast_vcf_field_value(field, value)
 
         # Genotype
-        if alt and alt != '.':
-            ref_alts = [ref] + alt.split(',')
-            s_d['genotype'] = [ref_alts[int(gt)] for gt in s_d['GT']]
-        else:
-            s_d['genotype'] = [ref] * 2
+        ref_alts = [ref] + alt.split(',')
+        sample_dict[
+            'genotype'] = [ref_alts[int(gt)] for gt in sample_dict['GT']]
 
         # Allelic frequency
-        s_d['allelic_frequency'] = get_allelic_frequencies(vcf_row[8], s)
+        sample_dict['allelic_frequency'] = get_allelic_frequencies(format_,
+                                                                   sample)
 
-        variant_dict['samples'].append(s_d)
-
-    info_split = vcf_row[7].split(';')
-    for i_s in info_split:
-        if i_s.startswith('ANN='):
-            anns = {}
-            for i, a in enumerate(i_s.split(',')[:n_anns]):
-                a_split = a.split('|')
-                anns[i] = {ANN_FIELDS[j]: a_split[j] for j in range(1, 15)}
-            variant_dict['ANN'] = anns
-        else:
-            field, value = i_s.split('=')
-            variant_dict[field] = cast_vcf_field_value(field, value)
+        variant_dict['samples'].append(sample_dict)
 
     return variant_dict
 
 
-def get_info(vcf_row, field):
+def get_info(field, vcf_row=None, info=None):
     """
     Get field from variant INFO.
-    :param vcf_row: iterable; a .VCF row
     :param field: str;
+    :param vcf_row: iterable; a .VCF row
+    :param info: str; INFO
     :return: str; field value
     """
 
-    for fv in vcf_row[7].split(';'):  # For each INFO
+    if not info:
+        info = vcf_row[7]
+
+    for fv in info.split(';'):  # For each INFO
+
         f, v = fv.split('=')
+
         if f == field:
             return v
 
 
-def get_ann(vcf_row, field, n_anns=1, ann_fields=ANN_FIELDS):
+def get_ann(field, vcf_row=None, info=None, ann_fields=ANN_FIELDS):
     """
-    Get field from variant ANN(s).
-    :param vcf_row: iterable; a .VCF row
+    Get field from variant ANN.
     :param field: str; 'ALT' | 'effect' | 'impact' | 'gene_name' | 'gene_id' |
     'feature_type' | 'feature_id' | 'transcript_biotype' | 'rank' | 'hgvsc' |
     'hgvsp' | 'cdna_position' | 'cds_position' | 'protein_position' |
     'distance_to_feature'| 'error'
-    :param n_anns: int; number of ANNs to get field from
-    :return: list; of field values
+    :param vcf_row: iterable; a .VCF row
+    :param info: str; INFO
+    :return: str; field value
     """
 
     # ANN is in INFO, which is the 7th .VCF column
-    for f in vcf_row[7].split(';'):  # For each INFO
+    if not info:
+        info = vcf_row[7]
 
-        if f.startswith('ANN='):  # ANN
+    for fv in info.split(';'):  # For each INFO
 
-            # Strip 'ANN=' prefix
-            f = f[4:]
+        f, v = fv.split('=')
 
-            vs = []
+        if f == 'ANN':
 
-            # 1 variant can have multiple ANNs split by ','
-            anns = f.split(',')
+            # Variant can have multiple ANNs split by ','; use 1st ANN
+            a = v.split(',')[0]
 
-            for a in anns[:n_anns]:  # For each ANN
-                vs.append(a.split('|')[ann_fields.index(field)])
-
-            return vs
+            return a.split('|')[ann_fields.index(field)]
 
 
 # ==============================================================================
 #  Function on .VCF row element
 # ==============================================================================
-#TODO:
 def cast_vcf_field_value(field, value):
     """
     Cast .VCF field's value.
@@ -235,11 +243,10 @@ def cast_vcf_field_value(field, value):
     try:
         return {
             'POS': int,
-            'ID': str,
             'QUAL': float,
-            'GT': lambda x: split('[|/]', x),
-            'AD': lambda x: x.split(','),
-            'CLNSIG': lambda x: max([int(s) for s in split('[,|]', x)]),
+            'GT': lambda v: split('[|/]', v),
+            'AD': lambda v: v.split(','),
+            'CLNSIG': lambda v: max([int(s) for s in split('[,|]', v)]),
         }[field](value)
 
     except ValueError:

@@ -6,7 +6,8 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import get_variant_start_and_end_positions
+from .variant import (get_genotype, get_ann, get_variant_start_and_end_positions,
+                      get_variant_type)
 
 HDF5_COMPRESSOR = 'blosc'
 HDF5_COMPRESSION_LEVEL = 1
@@ -67,7 +68,7 @@ class VariantHDF5:
                 print('\tFailed ({}).'.format(e))
                 reset = True
 
-        if reset:
+
             print('Resetting ...')
 
             if self.variant_hdf5:
@@ -129,15 +130,14 @@ class VariantHDF5:
                     gt = get_genotype(format_, sample)
                     effect, impact, gene_name = get_ann(
                         info, ['effect', 'impact', 'gene_name'])
-                    pathogenicity =
+                    pathogenicity = None
 
                     if chrom not in chrom_table_to_row_dict:
                         chrom_table = variant_hdf5.create_table(
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                            #                             expectedrows=chrom_n_rows[chrom],
-                        )
+                            expectedrows=chrom_n_rows[chrom], )
                         print('\t\tMaking chromosome {} variant table ...'.
                               format(chrom))
                         chrom_table_to_row_dict[chrom] = chrom_table.row
