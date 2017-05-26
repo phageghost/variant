@@ -68,6 +68,7 @@ class VariantHDF5:
                 print('\tFailed ({}).'.format(e))
                 reset = True
 
+        if reset:
             print('Resetting ...')
 
             if self.variant_hdf5:
@@ -128,8 +129,8 @@ class VariantHDF5:
                     variant_type = get_variant_type(ref, alt)
                     gt = get_genotype(format_, sample)
                     effect, impact, gene_name = get_ann(
-                        info, ['effect', 'impact', 'gene_name'])
-                    pathogenicity = None
+                        ['effect', 'impact', 'gene_name'], info=info)
+                    # pathogenicity = None
 
                     if chrom not in chrom_table_to_row_dict:
                         chrom_table = variant_hdf5.create_table(
@@ -154,7 +155,7 @@ class VariantHDF5:
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
-                    cursor['pathogenicity'] = pathogenicity
+                    # cursor['pathogenicity'] = pathogenicity
 
                     if id_ != '.':
                         self.rsid_to_chrom_dict[id_] = chrom
