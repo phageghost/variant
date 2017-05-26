@@ -6,8 +6,8 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_genotype, get_ann, get_variant_start_and_end_positions,
-                      get_variant_type)
+from .variant import (get_ann, get_genotype,
+                      get_variant_start_and_end_positions, get_variant_type)
 
 HDF5_COMPRESSOR = 'blosc'
 HDF5_COMPRESSION_LEVEL = 1
@@ -67,7 +67,6 @@ class VariantHDF5:
             except (FileNotFoundError, HDF5ExtError) as e:
                 print('\tFailed ({}).'.format(e))
                 reset = True
-
 
             print('Resetting ...')
 
