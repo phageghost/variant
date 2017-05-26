@@ -28,12 +28,12 @@ class VariantHDF5:
         # File paths
         self.variant_file_path = variant_file_path
         self.variant_hdf5_file_path = '{}.hdf5'.format(self.variant_file_path)
-        self.rsis_to_chrom_dict_file_path = '{}.rsid_to_chrom_dict.pickle.gz'.format(
+        self.id_to_chrom_dict_file_path = '{}.id_to_chrom_dict.pickle.gz'.format(
             self.variant_file_path)
 
         # Data
         self.variant_hdf5 = None
-        self.rsid_to_chrom_dict = {}
+        self.id_to_chrom_dict = {}
 
         self._load_data(reset=reset)
 
@@ -49,7 +49,7 @@ class VariantHDF5:
 
     def _load_data(self, reset=False):
         """
-        Initialize self.variant_hdf5 & self.rsid_to_chrom_dict.
+        Initialize self.variant_hdf5 & self.id_to_chrom_dict.
         :param reset: bool; re-make data instead of reading from files
         :return: None
         """
@@ -61,11 +61,11 @@ class VariantHDF5:
                 self.variant_hdf5 = open_file(
                     self.variant_hdf5_file_path, mode='r')
 
-                print('Reading RSID-to-chromosome dict ...')
-                self._read_rsid_to_chrom_dict()
+                print('Reading ID-to-chromosome dict ...')
+                self._read_id_to_chrom_dict()
 
             except (FileNotFoundError, HDF5ExtError) as e:
-                print('\tFailed ({}).'.format(e))
+                print('\tFailed: {}.'.format(e))
                 reset = True
 
         if reset:
@@ -73,9 +73,12 @@ class VariantHDF5:
 
             if self.variant_hdf5:
                 self.variant_hdf5.close()
+                print('Closed varinat HDF5.')
 
+            print('Making variant HDF5 ...')
             self._make_variant_hdf5()
 
+            print('Reading variant HDF5 ...')
             self.variant_hdf5 = open_file(
                 self.variant_hdf5_file_path, mode='r')
 
@@ -94,19 +97,19 @@ class VariantHDF5:
                 data_start_position = f.tell()
                 line = f.readline()
 
-            # print('Counting variants in chromosomes ...')
-            # chrom_n_rows = defaultdict(lambda: 0)
-            # chrom = None
-            # while line:
-            #     a_chrom = line.split('\t')[0]
-            #
-            #     if a_chrom != chrom:
-            #         print('\t@ {} ...'.format(a_chrom))
-            #         chrom = a_chrom
-            #
-            #     chrom_n_rows[a_chrom] += 1
-            #     line = f.readline()
-            # pprint(chrom_n_rows)
+            print('Counting variants in chromosomes ...')
+            chrom_n_rows = defaultdict(lambda: 0)
+            chrom = None
+            while line:
+                a_chrom = line.split('\t')[0]
+
+                if a_chrom != chrom:
+                    print('\t@ {} ...'.format(a_chrom))
+                    chrom = a_chrom
+
+                chrom_n_rows[a_chrom] += 1
+                line = f.readline()
+            pprint(chrom_n_rows)
 
             print('Making variant HDF5 ...')
             with open_file(
@@ -144,8 +147,7 @@ class VariantHDF5:
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                            # expectedrows=chrom_n_rows[chrom],
-                        )
+                            expectedrows=chrom_n_rows[chrom], )
                         print('\t\tMaking chromosome {} variant table ...'.
                               format(chrom))
                         chrom_table_to_row_dict[chrom] = chrom_table.row
@@ -170,7 +172,7 @@ class VariantHDF5:
                     cursor.append()
 
                     if id_ != '.':
-                        self.rsid_to_chrom_dict[id_] = chrom
+                        self.id_to_chrom_dict[id_] = chrom
 
                 print('Flushing tables and making column indices ...')
                 for chrom in chrom_table_to_row_dict:
@@ -199,8 +201,8 @@ class VariantHDF5:
                 self.variant_hdf5 = variant_hdf5
                 print(self.variant_hdf5)
 
-                print('Writing RSID-to-chromosome dict ...')
-                self._write_rsid_to_chrom_dict()
+                print('Writing ID-to-chromosome dict ...')
+                self._write_id_to_chrom_dict()
 
     class _VariantDescription(IsDescription):
         """
@@ -227,40 +229,60 @@ class VariantHDF5:
         # FORMAT & SAMPLE
         GT = StringCol(16)
 
-    def _write_rsid_to_chrom_dict(self):
+    def _write_id_to_chrom_dict(self):
         """
-        Write RSID-to-chromosome dict to file.
+        Write ID-to-chromosome dict to file.
         :return: None
         """
 
-        with open(self.rsis_to_chrom_dict_file_path, 'wb') as f:
-            dump(self.rsid_to_chrom_dict, f)
+        with open(self.id_to_chrom_dict_file_path, 'wb') as f:
+            dump(self.id_to_chrom_dict, f)
 
-    def _read_rsid_to_chrom_dict(self):
+    def _read_id_to_chrom_dict(self):
         """
-        Read RSID-to-chromosome dict from file.
+        Read ID-to-chromosome dict from file.
         :return: None
         """
 
-        with open(self.rsis_to_chrom_dict, 'rb') as f:
-            self.rsid_to_chrom_dict = load(f)
+        with open(self.id_to_chrom_dict_file_path, 'rb') as f:
+            self.id_to_chrom_dict = load(f)
 
     def get_variant_by_id(self, id_):
         """
         Search for id_ in variants.
-        :param id_: str; RSID
+        :param id_: str; ID
         :return: dict; {}
         """
 
-        chrom = self.rsid_to_chrom_dict.get(id_)
+        chrom = self.id_to_chrom_dict.get(id_)
 
         if chrom:  # Variant found
             chrom_table = self.variant_hdf5.get_node(
                 '/', 'chromosome_{}_variants'.format(chrom))
-            return [
-                row.fetch_all_fields()
-                for row in chrom_table.where("id_ == b'{}'".format(id_))
-            ]
+            return self._read_where(chrom_table, "ID == b'{}'".format(id_))
 
         else:  # Variant not found
             return None
+
+    def _read_where(self, hdf5_table, query):
+        """
+        Do hdf5_table.read_where(query) and map the results to column names.
+        :param hdf5_table: HDF5 Table
+        :param query: str; query
+        :return: list; of dict; (n_results); [{column: value, ...}, ...]
+        """
+
+        columns = hdf5_table.colnames
+
+        dicts = []
+        for row in hdf5_table.read_where(query):
+
+            dict_ = {}
+            for c, v in zip(columns, row):
+                try:
+                    dict_[c] = v.decode()
+                except AttributeError:
+                    dict_[c] = v
+            dicts.append(dict_)
+
+        return dicts

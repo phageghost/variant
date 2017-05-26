@@ -66,7 +66,7 @@ def convert_vcf_to_maf(vcf,
         if i % 1000 == 0:
             print('\t@ {} ...'.format(i + 1))
 
-        chrom, pos, rsid, ref, alt, info = vcf_row.iloc[[0, 1, 2, 3, 4, 7]]
+        chrom, pos, id_, ref, alt, info = vcf_row.iloc[[0, 1, 2, 3, 4, 7]]
 
         start, end = _get_variant_start_and_end_positions(pos, ref, alt)
 
@@ -94,7 +94,7 @@ def convert_vcf_to_maf(vcf,
 
                     gene_id = ensg_to_entrez_dict.get(a_s[4], 0)
 
-        tmp[i] = gene_name, gene_id, chrom, start, end, vc, vt, rsid, ref, alt
+        tmp[i] = gene_name, gene_id, chrom, start, end, vc, vt, id_, ref, alt
 
     maf[[
         'Hugo_Symbol', 'Entrez_Gene_Id', 'Chromosome', 'Start_Position',
