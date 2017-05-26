@@ -94,17 +94,19 @@ class VariantHDF5:
                 data_start_position = f.tell()
                 line = f.readline()
 
-            print('Counting variants in chromosomes ...')
-            chrom_n_rows = defaultdict(lambda: 0)
-            chrom = None
-            while line:
-                a_chrom = line.split('\t')[0]
-                if a_chrom != chrom:
-                    print('\t@ {} ...'.format(a_chrom))
-                    chrom = a_chrom
-                    chrom_n_rows[a_chrom] += 1
-                line = f.readline()
-            pprint(chrom_n_rows)
+            # print('Counting variants in chromosomes ...')
+            # chrom_n_rows = defaultdict(lambda: 0)
+            # chrom = None
+            # while line:
+            #     a_chrom = line.split('\t')[0]
+            #
+            #     if a_chrom != chrom:
+            #         print('\t@ {} ...'.format(a_chrom))
+            #         chrom = a_chrom
+            #
+            #     chrom_n_rows[a_chrom] += 1
+            #     line = f.readline()
+            # pprint(chrom_n_rows)
 
             print('Making variant HDF5 ...')
             with open_file(
@@ -121,46 +123,54 @@ class VariantHDF5:
                     if i % 1000000 == 0:
                         print('\t@ {} ...'.format(i + 1))
 
+                    # Parse .VCF row
                     chrom, pos, id_, ref, alt, qual, filter_, info, format_, sample = line.split(
                         '\t')[:10]
+
                     start, end = get_variant_start_and_end_positions(
                         int(pos), ref, alt)
 
                     variant_type = get_variant_type(ref, alt)
-                    gt = get_genotype(format_, sample)
-                    effect, impact, gene_name = get_ann(
-                        ['effect', 'impact', 'gene_name'], info=info)
+
                     # pathogenicity = None
 
-                    if chrom not in chrom_table_to_row_dict:
+                    effect, impact, gene_name = get_ann(
+                        ['effect', 'impact', 'gene_name'], info=info)
+
+                    gt = get_genotype(format_, sample)
+
+                    if chrom not in chrom_table_to_row_dict:  # Make table
                         chrom_table = variant_hdf5.create_table(
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                            expectedrows=chrom_n_rows[chrom], )
+                            # expectedrows=chrom_n_rows[chrom],
+                        )
                         print('\t\tMaking chromosome {} variant table ...'.
                               format(chrom))
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
+                    # Write variant
                     cursor = chrom_table_to_row_dict[chrom]
-                    cursor['chrom'] = chrom
+
+                    cursor['CHROM'] = chrom
+                    cursor['ID'] = id_
+                    cursor['REF'] = ref
+                    cursor['ALT'] = alt
+                    cursor['QUAL'] = qual
                     cursor['start'] = start
                     cursor['end'] = end
-                    cursor['id_'] = id_
-                    cursor['ref'] = ref
-                    cursor['alt'] = alt
-                    cursor['qual'] = qual
                     cursor['variant_type'] = variant_type
-                    cursor['gt'] = gt
+                    # cursor['pathogenicity'] = pathogenicity
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
-                    # cursor['pathogenicity'] = pathogenicity
+                    cursor['GT'] = gt
+
+                    cursor.append()
 
                     if id_ != '.':
                         self.rsid_to_chrom_dict[id_] = chrom
-
-                    cursor.append()
 
                 print('Flushing tables and making column indices ...')
                 for chrom in chrom_table_to_row_dict:
@@ -169,9 +179,21 @@ class VariantHDF5:
                         '/', 'chromosome_{}_variants'.format(chrom))
                     chrom_table.flush()
 
-                    # TODO: Sort like .VCF row
-                    for col in ['chrom', 'start', 'end', 'id_', 'ref', 'alt']:
-                        print('\t\t Making {} index ...'.format(col))
+                    for col in [
+                            'CHROM',
+                            'ID',
+                            'REF',
+                            'ALT',
+                            'QUAL',
+                            'start',
+                            'end',
+                            'variant_type',
+                            # 'pathogenicity'
+                            'effect',
+                            'impact',
+                            'gene_name',
+                            'GT',
+                    ]:
                         chrom_table.cols._f_col(col).create_csindex()
 
                 self.variant_hdf5 = variant_hdf5
@@ -186,18 +208,24 @@ class VariantHDF5:
         """
 
         # TODO: Match with VCF specification
-        chrom = StringCol(16)
+        CHROM = StringCol(8)
+        ID = StringCol(16)
+        REF = StringCol(256)
+        ALT = StringCol(256)
+        QUAL = Float32Col()
+        # POS
         start = Int32Col()
         end = Int32Col()
-        id_ = StringCol(16)
-        ref = StringCol(256)
-        alt = StringCol(256)
-        qual = Float32Col()
-        gt = StringCol(16)
-        vt = StringCol(8)
+        # REF & ALT
+        variant_type = StringCol(8)
+        # INFO
+        pathogenicity = StringCol(8)
+        # INFO ANN
         effect = StringCol(64)
         impact = StringCol(8)
         gene_name = StringCol(16)
+        # FORMAT & SAMPLE
+        GT = StringCol(16)
 
     def _write_rsid_to_chrom_dict(self):
         """

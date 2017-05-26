@@ -201,16 +201,16 @@ def get_info(field, vcf_row=None, info=None):
             return v
 
 
-def get_ann(field, vcf_row=None, info=None, ann_fields=ANN_FIELDS):
+def get_ann(fields, vcf_row=None, info=None):
     """
     Get field from variant ANN.
-    :param field: str; 'ALT' | 'effect' | 'impact' | 'gene_name' | 'gene_id' |
-    'feature_type' | 'feature_id' | 'transcript_biotype' | 'rank' | 'hgvsc' |
-    'hgvsp' | 'cdna_position' | 'cds_position' | 'protein_position' |
-    'distance_to_feature'| 'error'
+    :param fields: iterable; of str: 'ALT' | 'effect' | 'impact' | 'gene_name'
+    | 'gene_id' | 'feature_type' | 'feature_id' | 'transcript_biotype' | 'rank'
+    | 'hgvsc' | 'hgvsp' | 'cdna_position' | 'cds_position' | 'protein_position'
+    | 'distance_to_feature'| 'error'
     :param vcf_row: iterable; a .VCF row
     :param info: str; INFO
-    :return: str; field value
+    :return: list; of str field value
     """
 
     # ANN is in INFO, which is the 7th .VCF column
@@ -219,14 +219,17 @@ def get_ann(field, vcf_row=None, info=None, ann_fields=ANN_FIELDS):
 
     for fv in info.split(';'):  # For each INFO
 
-        f, v = fv.split('=')
+        if '=' not in fv:  # Some fields are not in field=value format
+            # print('{} not in FIELD=VALUE in INFO.'.format(fv))
+            continue
 
+        f, v = fv.split('=')
         if f == 'ANN':
 
-            # Variant can have multiple ANNs split by ','; use 1st ANN
-            a = v.split(',')[0]
+            # Variant can have multiple ANNs, but use the 1st ANN
+            a_split = v.split(',')[0].split('|')
 
-            return a.split('|')[ann_fields.index(field)]
+            return [a_split[ANN_FIELDS.index(f)] for f in fields]
 
 
 # ==============================================================================
