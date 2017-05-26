@@ -6,7 +6,7 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import _get_variant_start_and_end_positions
+from .variant import get_variant_start_and_end_positions
 
 HDF5_COMPRESSOR = 'blosc'
 HDF5_COMPRESSION_LEVEL = 1
@@ -98,7 +98,7 @@ class VariantHDF5:
             chrom = None
             while line:
                 a_chrom = line.split('\t')[0]
-                if chrom != a_chrom:
+                if a_chrom != chrom:
                     print('\t@ {} ...'.format(a_chrom))
                     chrom = a_chrom
                     chrom_n_rows[a_chrom] += 1
@@ -122,8 +122,14 @@ class VariantHDF5:
 
                     chrom, pos, id_, ref, alt, qual, filter_, info, format_, sample = line.split(
                         '\t')[:10]
-                    start, end = _get_variant_start_and_end_positions(
+                    start, end = get_variant_start_and_end_positions(
                         int(pos), ref, alt)
+
+                    variant_type = get_variant_type(ref, alt)
+                    gt = get_genotype(format_, sample)
+                    effect, impact, gene_name = get_ann(
+                        info, ['effect', 'impact', 'gene_name'])
+                    pathogenicity =
 
                     if chrom not in chrom_table_to_row_dict:
                         chrom_table = variant_hdf5.create_table(
@@ -144,6 +150,12 @@ class VariantHDF5:
                     cursor['ref'] = ref
                     cursor['alt'] = alt
                     cursor['qual'] = qual
+                    cursor['variant_type'] = variant_type
+                    cursor['gt'] = gt
+                    cursor['effect'] = effect
+                    cursor['impact'] = impact
+                    cursor['gene_name'] = gene_name
+                    cursor['pathogenicity'] = pathogenicity
 
                     if id_ != '.':
                         self.rsid_to_chrom_dict[id_] = chrom
@@ -157,8 +169,8 @@ class VariantHDF5:
                         '/', 'chromosome_{}_variants'.format(chrom))
                     chrom_table.flush()
 
-                    for col in sorted(
-                        ['chrom', 'start', 'end', 'id_', 'ref', 'alt']):
+                    # TODO: Sort like .VCF row
+                    for col in ['chrom', 'start', 'end', 'id_', 'ref', 'alt']:
                         print('\t\t Making {} index ...'.format(col))
                         chrom_table.cols._f_col(col).create_csindex()
 
@@ -182,6 +194,10 @@ class VariantHDF5:
         alt = StringCol(256)
         qual = Float32Col()
         gt = StringCol(16)
+        vt = StringCol(8)
+        effect = StringCol(64)
+        impact = StringCol(8)
+        gene_name = StringCol(16)
 
     def _write_rsid_to_chrom_dict(self):
         """

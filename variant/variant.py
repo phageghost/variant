@@ -223,6 +223,7 @@ def get_ann(vcf_row, field, n_anns=1, ann_fields=ANN_FIELDS):
 # ==============================================================================
 #  Function on .VCF row element
 # ==============================================================================
+#TODO:
 def cast_vcf_field_value(field, value):
     """
     Cast .VCF field's value.
@@ -290,6 +291,16 @@ def get_variant_type(ref, alt):
         vt = 'DEL'
 
     return vt
+
+
+def get_genotype(format_, sample):
+    """
+    Get genotype.
+    :param format_: str; .VCF FORMAT column
+    :param sample: str; .VCF sample column
+    :return: str;
+    """
+    return
 
 
 def get_allelic_frequencies(format_, sample):
