@@ -247,9 +247,9 @@ class VariantHDF5:
         with open(self.id_to_chrom_dict_file_path, 'rb') as f:
             self.id_to_chrom_dict = load(f)
 
-    def get_variant_by_id(self, id_):
+    def get_variants_by_id(self, id_):
         """
-        Search for id_ in variants.
+        Get variants by id.
         :param id_: str; ID
         :return: dict; {}
         """
@@ -264,6 +264,21 @@ class VariantHDF5:
         else:  # Variant not found
             return None
 
+    def get_variants_by_region(self, chrom, start, end):
+        """
+        Get variants by region.
+        :param hdf5_table: HDF5 Table
+        :param chrom: str; chromosome
+        :param start: int; start position
+        :param end: int; end position
+        :return: list; of dict; (n_results); [{column: value, ...}, ...]
+        """
+
+        chrom_table = self.variant_hdf5.get_node(
+            '/', 'chromosome_{}_variants'.format(chrom))
+        return self._read_where(
+            chrom_table, '({} <= start) & (end <= {})'.format(start, end))
+
     def _read_where(self, hdf5_table, query):
         """
         Do hdf5_table.read_where(query) and map the results to column names.
@@ -274,6 +289,7 @@ class VariantHDF5:
 
         columns = hdf5_table.colnames
 
+        print('Reading {} where: {} ...'.format(hdf5_table.name, query))
         dicts = []
         for row in hdf5_table.read_where(query):
 
