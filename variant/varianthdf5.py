@@ -9,9 +9,6 @@ from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
 from .variant import (get_ann, get_genotype,
                       get_variant_start_and_end_positions, get_variant_type)
 
-HDF5_COMPRESSOR = 'blosc'
-HDF5_COMPRESSION_LEVEL = 1
-
 
 class VariantHDF5:
     """
@@ -30,10 +27,13 @@ class VariantHDF5:
         self.variant_hdf5_file_path = '{}.hdf5'.format(self.variant_file_path)
         self.id_to_chrom_dict_file_path = '{}.id_to_chrom_dict.pickle.gz'.format(
             self.variant_file_path)
+        self.gene_to_chrom_dict_file_path = '{}.gene_to_chrom_dict.pickle.gz'.format(
+            self.variant_file_path)
 
         # Data
         self.variant_hdf5 = None
         self.id_to_chrom_dict = {}
+        self.gene_to_chrom_dict = {}
 
         self._load_data(reset=reset)
 
@@ -63,6 +63,9 @@ class VariantHDF5:
 
                 print('Reading ID-to-chromosome dict ...')
                 self._read_id_to_chrom_dict()
+
+                print('Reading gene-to-chromosome dict ...')
+                self._read_gene_to_chrom_dict()
 
             except (FileNotFoundError, HDF5ExtError) as e:
                 print('\tFailed: {}.'.format(e))
@@ -116,8 +119,7 @@ class VariantHDF5:
                     self.variant_hdf5_file_path,
                     mode='w',
                     filters=Filters(
-                        complevel=HDF5_COMPRESSION_LEVEL,
-                        complib=HDF5_COMPRESSOR)) as variant_hdf5:
+                        complevel=1, complib='blosc')) as variant_hdf5:
 
                 chrom_table_to_row_dict = {}
 
@@ -148,8 +150,7 @@ class VariantHDF5:
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
                             expectedrows=chrom_n_rows[chrom], )
-                        print('\t\tMaking chromosome {} variant table ...'.
-                              format(chrom))
+                        print('\t\tMaking {} ...'.format(chrom_table.name))
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
                     # Write variant
@@ -171,14 +172,17 @@ class VariantHDF5:
 
                     cursor.append()
 
+                    # Update *-to-chromosome dictionaries
                     if id_ != '.':
                         self.id_to_chrom_dict[id_] = chrom
 
+                    self.gene_to_chrom_dict[gene_name] = chrom
+
                 print('Flushing tables and making column indices ...')
                 for chrom in chrom_table_to_row_dict:
-                    print('\tchromosome {} variant table ...'.format(chrom))
                     chrom_table = variant_hdf5.get_node(
                         '/', 'chromosome_{}_variants'.format(chrom))
+                    print('\t{} ...'.format(chrom_table.name))
                     chrom_table.flush()
 
                     for col in [
@@ -203,6 +207,9 @@ class VariantHDF5:
 
                 print('Writing ID-to-chromosome dict ...')
                 self._write_id_to_chrom_dict()
+
+                print('Writing gene-to-chromosome dict ...')
+                self._write_gene_to_chrom_dict()
 
     class _VariantDescription(IsDescription):
         """
@@ -229,6 +236,15 @@ class VariantHDF5:
         # FORMAT & SAMPLE
         GT = StringCol(16)
 
+    def _read_id_to_chrom_dict(self):
+        """
+        Read ID-to-chromosome dict from file.
+        :return: None
+        """
+
+        with open(self.id_to_chrom_dict_file_path, 'rb') as f:
+            self.id_to_chrom_dict = load(f)
+
     def _write_id_to_chrom_dict(self):
         """
         Write ID-to-chromosome dict to file.
@@ -238,14 +254,23 @@ class VariantHDF5:
         with open(self.id_to_chrom_dict_file_path, 'wb') as f:
             dump(self.id_to_chrom_dict, f)
 
-    def _read_id_to_chrom_dict(self):
+    def _read_gene_to_chrom_dict(self):
         """
-        Read ID-to-chromosome dict from file.
+        Read gene-to-chromosome dict from file.
         :return: None
         """
 
-        with open(self.id_to_chrom_dict_file_path, 'rb') as f:
-            self.id_to_chrom_dict = load(f)
+        with open(self.gene_to_chrom_dict_file_path, 'rb') as f:
+            self.gene_to_chrom_dict = load(f)
+
+    def _write_gene_to_chrom_dict(self):
+        """
+        Write gene-to-chromosome dict to file.
+        :return: None
+        """
+
+        with open(self.gene_to_chrom_dict_file_path, 'wb') as f:
+            dump(self.gene_to_chrom_dict, f)
 
     def get_variants_by_id(self, id_):
         """
@@ -261,12 +286,24 @@ class VariantHDF5:
                 '/', 'chromosome_{}_variants'.format(chrom))
             return self._read_where(chrom_table, "ID == b'{}'".format(id_))
 
-        else:  # Variant not found
-            return None
+    def get_variants_by_gene(self, gene):
+        """
+        Get variants by gene.
+        :param gene: str; HGNC gene name
+        :return: dict; {}
+        """
+
+        chrom = self.gene_to_chrom_dict.get(gene)
+
+        if chrom:  # Variant found
+            chrom_table = self.variant_hdf5.get_node(
+                '/', 'chromosome_{}_variants'.format(chrom))
+            return self._read_where(chrom_table,
+                                    "gene_name == b'{}'".format(gene))
 
     def get_variants_by_region(self, chrom, start, end):
         """
-        Get variants by region.
+        Get variants by region (chrom:start-end).
         :param hdf5_table: HDF5 Table
         :param chrom: str; chromosome
         :param start: int; start position
@@ -277,7 +314,7 @@ class VariantHDF5:
         chrom_table = self.variant_hdf5.get_node(
             '/', 'chromosome_{}_variants'.format(chrom))
         return self._read_where(
-            chrom_table, '({} <= start) & (end <= {})'.format(start, end))
+            chrom_table, '({} <= start) & (start <= {})'.format(start, end))
 
     def _read_where(self, hdf5_table, query):
         """
