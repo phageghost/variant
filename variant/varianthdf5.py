@@ -142,6 +142,7 @@ class VariantHDF5:
                         ['effect', 'impact', 'gene_name'], info=info)
 
                     gt = get_genotype(format_, sample)
+                    print(gt)
 
                     if chrom not in chrom_table_to_row_dict:  # Make table
                         chrom_table = variant_hdf5.create_table(

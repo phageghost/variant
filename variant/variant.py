@@ -241,9 +241,9 @@ def cast_vcf_field_value(field, value):
     c = {
         'POS': int,
         'QUAL': float,
-        'GT': lambda v: split('[|/]', v),
-        'AD': lambda v: v.split(','),
         'CLNSIG': lambda v: max([int(s) for s in split('[,|]', v)]),
+        'GT': lambda v: [int(s) for s in split('[|/]', v)],
+        'AD': lambda v: v.split(','),
     }.get(field)
 
     if callable(c):
@@ -304,9 +304,15 @@ def get_genotype(format_, sample):
     Get genotype.
     :param format_: str; .VCF FORMAT column
     :param sample: str; .VCF sample column
-    :return: str;
+    :return: list; of int;
     """
-    return
+
+    format_split = format_.split(':')
+    sample_split = sample.split(':')
+
+    for f, s in zip(format_split, sample_split):
+        if f == 'GT':
+            return cast_vcf_field_value(f, s)
 
 
 def get_allelic_frequencies(format_, sample):
