@@ -142,7 +142,6 @@ class VariantHDF5:
                         ['effect', 'impact', 'gene_name'], info=info)
 
                     gt = get_genotype(format_, sample)
-                    print(gt)
 
                     if chrom not in chrom_table_to_row_dict:  # Make table
                         chrom_table = variant_hdf5.create_table(
@@ -220,6 +219,7 @@ class VariantHDF5:
         Describe VariantHDF5 table columns.
         """
 
+        # TODO: Refactor
         # TODO: Match with VCF specification
         CHROM = StringCol(8)
         ID = StringCol(16)

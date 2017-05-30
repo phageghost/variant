@@ -304,7 +304,7 @@ def get_genotype(format_, sample):
     Get genotype.
     :param format_: str; .VCF FORMAT column
     :param sample: str; .VCF sample column
-    :return: list; of int;
+    :return: str; '0|1' | '1|1'
     """
 
     format_split = format_.split(':')
@@ -312,7 +312,7 @@ def get_genotype(format_, sample):
 
     for f, s in zip(format_split, sample_split):
         if f == 'GT':
-            return cast_vcf_field_value(f, s)
+            return '{}|{}'.format(*cast_vcf_field_value(f, s))
 
 
 def get_allelic_frequencies(format_, sample):
