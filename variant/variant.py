@@ -181,27 +181,33 @@ def parse_vcf_row(vcf_row):
     return variant_dict
 
 
-def get_info(field, vcf_row=None, info=None):
+def get_infos(fields, vcf_row=None, info=None):
     """
-    Get field from variant INFO.
-    :param field: str;
+    Get fields from variant INFO.
+    :param fields: iterable; of str
     :param vcf_row: iterable; a .VCF row
     :param info: str; INFO
-    :return: str; field value
+    :return: list; of str field value
     """
 
     if not info:
         info = vcf_row[7]
 
+    values = []
     for fv in info.split(';'):  # For each INFO
 
+        if '=' not in fv:  # Some fields are not in field=value format
+            # print('{} not in FIELD=VALUE in INFO.'.format(fv))
+            continue
+
         f, v = fv.split('=')
+        if f in fields:
+            values.append(cast_vcf_field_value(f, v))
 
-        if f == field:
-            return v
+    return values
 
 
-def get_ann(fields, vcf_row=None, info=None):
+def get_anns(fields, vcf_row=None, info=None):
     """
     Get field from variant ANN.
     :param fields: iterable; of str: 'ALT' | 'effect' | 'impact' | 'gene_name'
@@ -213,23 +219,12 @@ def get_ann(fields, vcf_row=None, info=None):
     :return: list; of str field value
     """
 
-    # ANN is in INFO, which is the 7th .VCF column
-    if not info:
-        info = vcf_row[7]
+    ann = get_infos(['ANN'], vcf_row=vcf_row, info=info)[0]
 
-    for fv in info.split(';'):  # For each INFO
+    # Variant can have multiple ANNs, but use the 1st ANN
+    ann_split = ann.split(',')[0].split('|')
 
-        if '=' not in fv:  # Some fields are not in field=value format
-            # print('{} not in FIELD=VALUE in INFO.'.format(fv))
-            continue
-
-        f, v = fv.split('=')
-        if f == 'ANN':
-
-            # Variant can have multiple ANNs, but use the 1st ANN
-            a_split = v.split(',')[0].split('|')
-
-            return [a_split[ANN_FIELDS.index(f)] for f in fields]
+    return [ann_split[ANN_FIELDS.index(f)] for f in fields]
 
 
 # ==============================================================================
@@ -243,16 +238,17 @@ def cast_vcf_field_value(field, value):
     :return: int | float | tuple;
     """
 
-    try:
-        return {
-            'POS': int,
-            'QUAL': float,
-            'GT': lambda v: split('[|/]', v),
-            'AD': lambda v: v.split(','),
-            'CLNSIG': lambda v: max([int(s) for s in split('[,|]', v)]),
-        }[field](value)
+    c = {
+        'POS': int,
+        'QUAL': float,
+        'GT': lambda v: split('[|/]', v),
+        'AD': lambda v: v.split(','),
+        'CLNSIG': lambda v: max([int(s) for s in split('[,|]', v)]),
+    }.get(field)
 
-    except ValueError:
+    if callable(c):
+        return c(value)
+    else:
         return value
 
 
@@ -331,3 +327,23 @@ def get_allelic_frequencies(format_, sample):
     dp = int(sample_split[dp_i])
 
     return ['{:.3f}'.format(ad / dp) for ad in ads]
+
+
+def describe_clnsig(clnsig):
+    """
+    Describe CLNSIG.
+    :param clnsig: int; 0 | 1 | 2 | 4 | 5 | 6 | 7 | 255
+    :return str; CLNSIG description
+    """
+
+    return {
+        0: 'unknown',
+        1: 'untested',
+        2: 'non-pathogenic',
+        3: 'probable-non-pathogenic',
+        4: 'probable-pathogenic',
+        5: 'pathogenic',
+        6: 'drug-response',
+        7: 'histocompatibility',
+        255: 'other',
+    }.get(clnsig)

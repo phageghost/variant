@@ -6,7 +6,7 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_ann, get_genotype,
+from .variant import (describe_clnsig, get_anns, get_genotype, get_infos,
                       get_variant_start_and_end_positions, get_variant_type)
 
 
@@ -137,9 +137,8 @@ class VariantHDF5:
 
                     variant_type = get_variant_type(ref, alt)
 
-                    # pathogenicity = None
-
-                    effect, impact, gene_name = get_ann(
+                    clnsig = get_infos(['CLNSIG'], info=info)
+                    effect, impact, gene_name = get_anns(
                         ['effect', 'impact', 'gene_name'], info=info)
 
                     gt = get_genotype(format_, sample)
@@ -149,7 +148,7 @@ class VariantHDF5:
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                            expectedrows=chrom_n_rows[chrom], )
+                            expectedrows=chrom_n_rows[chrom])
                         print('\t\tMaking {} ...'.format(chrom_table.name))
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
@@ -164,7 +163,10 @@ class VariantHDF5:
                     cursor['start'] = start
                     cursor['end'] = end
                     cursor['variant_type'] = variant_type
-                    # cursor['pathogenicity'] = pathogenicity
+                    if clnsig:
+                        clnsig = clnsig[0]
+                        cursor['CLNSIG'] = clnsig
+                        cursor['clinvar'] = describe_clnsig(clnsig)
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
@@ -194,7 +196,8 @@ class VariantHDF5:
                             'start',
                             'end',
                             'variant_type',
-                            # 'pathogenicity'
+                            'CLNSIG',
+                            'clinvar',
                             'effect',
                             'impact',
                             'gene_name',
@@ -228,7 +231,8 @@ class VariantHDF5:
         # REF & ALT
         variant_type = StringCol(8)
         # INFO
-        pathogenicity = StringCol(8)
+        CLNSIG = Int32Col()
+        clinvar = StringCol(8)
         # INFO ANN
         effect = StringCol(64)
         impact = StringCol(8)
