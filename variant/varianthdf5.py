@@ -141,7 +141,7 @@ class VariantHDF5:
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
                             expectedrows=chrom_n_rows[chrom])
-                        print('\t\tMade {}.'.format(chrom_table.name))
+                        print('\t\tMade {} table.'.format(chrom_table.name))
 
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
@@ -185,7 +185,7 @@ class VariantHDF5:
                 for chrom in chrom_table_to_row_dict:
                     chrom_table = variant_hdf5.get_node(
                         '/', 'chromosome_{}_variants'.format(chrom))
-                    print('\t{} ...'.format(chrom_table.name))
+                    print('\t{} table ...'.format(chrom_table.name))
                     chrom_table.flush()
 
                     for col in [
@@ -315,7 +315,7 @@ class VariantHDF5:
 
             return variant_dicts
 
-    def get_variants_by_region(self, chrom, pos):
+    def get_variants_by_region(self, chrom, start, end):
         """
         Get variants by region (chrom:start-end).
         :param hdf5_table: HDF5 Table
@@ -329,7 +329,7 @@ class VariantHDF5:
             '/', 'chromosome_{}_variants'.format(chrom))
 
         variant_dicts = self._read_where(
-            chrom_table, '({0} <= POS) & (POS <= {0})'.format(pos))
+            chrom_table, '({} <= POS) & (POS <= {})'.format(start, end))
 
         for d in variant_dicts:
             self._update_variant_dict(d)
