@@ -18,6 +18,7 @@ class VariantHDF5:
     def __init__(self, variant_file_path, reset=False):
         """
         Construct VariantHDF5.
+        :param variant_file_path: str; file path to .VCF
         :param reset: bool; re-make data instead of reading from files
         :return: None
         """
@@ -76,7 +77,7 @@ class VariantHDF5:
 
             if self.variant_hdf5:
                 self.variant_hdf5.close()
-                print('Closed varinat HDF5.')
+                print('Closed variant HDF5.')
 
             print('Making variant HDF5 ...')
             self._make_variant_hdf5()
@@ -93,7 +94,7 @@ class VariantHDF5:
 
         with open(self.variant_file_path, 'rt') as f:
 
-            print('Getting data start position ...')
+            print('Getting data-start position ...')
             data_start_position = None
             line = f.readline()
             while line.startswith('#'):
@@ -121,6 +122,7 @@ class VariantHDF5:
                     filters=Filters(
                         complevel=1, complib='blosc')) as variant_hdf5:
 
+                # Cursors for chromosome tables
                 chrom_table_to_row_dict = {}
 
                 f.seek(data_start_position)
@@ -130,47 +132,46 @@ class VariantHDF5:
 
                     # Parse .VCF row
                     chrom, pos, id_, ref, alt, qual, filter_, info, format_, sample = line.split(
-                        '\t')[:10]
-
-                    start, end = get_variant_start_and_end_positions(
-                        int(pos), ref, alt)
-
-                    variant_type = get_variant_type(ref, alt)
-
-                    clnsig = get_infos(['CLNSIG'], info=info)
-                    effect, impact, gene_name = get_anns(
-                        ['effect', 'impact', 'gene_name'], info=info)
-
-                    gt = get_genotype(format_, sample)
+                        '\t')
 
                     if chrom not in chrom_table_to_row_dict:  # Make table
+
                         chrom_table = variant_hdf5.create_table(
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
                             expectedrows=chrom_n_rows[chrom])
-                        print('\t\tMaking {} ...'.format(chrom_table.name))
+                        print('\t\tMade {}.'.format(chrom_table.name))
+
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
                     # Write variant
                     cursor = chrom_table_to_row_dict[chrom]
 
                     cursor['CHROM'] = chrom
+
+                    cursor['POS'] = pos
+
                     cursor['ID'] = id_
+
                     cursor['REF'] = ref
+
                     cursor['ALT'] = alt
+
                     cursor['QUAL'] = qual
-                    cursor['start'] = start
-                    cursor['end'] = end
-                    cursor['variant_type'] = variant_type
+
+                    clnsig = get_infos(['CLNSIG'], info=info)
                     if clnsig:
                         clnsig = clnsig[0]
                         cursor['CLNSIG'] = clnsig
-                        cursor['clinvar'] = describe_clnsig(clnsig)
+
+                    effect, impact, gene_name = get_anns(
+                        ['effect', 'impact', 'gene_name'], info=info)
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
-                    cursor['GT'] = gt
+
+                    cursor['GT'] = get_genotype(format_, sample)
 
                     cursor.append()
 
@@ -189,15 +190,12 @@ class VariantHDF5:
 
                     for col in [
                             'CHROM',
+                            'POS',
                             'ID',
                             'REF',
                             'ALT',
                             'QUAL',
-                            'start',
-                            'end',
-                            'variant_type',
                             'CLNSIG',
-                            'clinvar',
                             'effect',
                             'impact',
                             'gene_name',
@@ -227,13 +225,9 @@ class VariantHDF5:
         ALT = StringCol(256)
         QUAL = Float32Col()
         # POS
-        start = Int32Col()
-        end = Int32Col()
-        # REF & ALT
-        variant_type = StringCol(8)
+        POS = Int32Col()
         # INFO
         CLNSIG = Int32Col()
-        clinvar = StringCol(8)
         # INFO ANN
         effect = StringCol(64)
         impact = StringCol(8)
@@ -287,9 +281,17 @@ class VariantHDF5:
         chrom = self.id_to_chrom_dict.get(id_)
 
         if chrom:  # Variant found
+
             chrom_table = self.variant_hdf5.get_node(
                 '/', 'chromosome_{}_variants'.format(chrom))
-            return self._read_where(chrom_table, "ID == b'{}'".format(id_))
+
+            variant_dicts = self._read_where(chrom_table,
+                                             "ID == b'{}'".format(id_))
+
+            for d in variant_dicts:
+                self._update_variant_dict(d)
+
+            return variant_dicts
 
     def get_variants_by_gene(self, gene):
         """
@@ -301,12 +303,19 @@ class VariantHDF5:
         chrom = self.gene_to_chrom_dict.get(gene)
 
         if chrom:  # Variant found
+
             chrom_table = self.variant_hdf5.get_node(
                 '/', 'chromosome_{}_variants'.format(chrom))
-            return self._read_where(chrom_table,
-                                    "gene_name == b'{}'".format(gene))
 
-    def get_variants_by_region(self, chrom, start, end):
+            variant_dicts = self._read_where(chrom_table,
+                                             "gene_name == b'{}'".format(gene))
+
+            for d in variant_dicts:
+                self._update_variant_dict(d)
+
+            return variant_dicts
+
+    def get_variants_by_region(self, chrom, pos):
         """
         Get variants by region (chrom:start-end).
         :param hdf5_table: HDF5 Table
@@ -318,8 +327,14 @@ class VariantHDF5:
 
         chrom_table = self.variant_hdf5.get_node(
             '/', 'chromosome_{}_variants'.format(chrom))
-        return self._read_where(
-            chrom_table, '({} <= start) & (start <= {})'.format(start, end))
+
+        variant_dicts = self._read_where(
+            chrom_table, '({0} <= POS) & (POS <= {0})'.format(pos))
+
+        for d in variant_dicts:
+            self._update_variant_dict(d)
+
+        return variant_dicts
 
     def _read_where(self, hdf5_table, query):
         """
@@ -344,3 +359,20 @@ class VariantHDF5:
             dicts.append(dict_)
 
         return dicts
+
+    def _update_variant_dict(self, variant_dict):
+        """
+        Update variant_dict: add variant_type, clinvar, start, & end fields.
+        :param dict; variant dict
+        :return: None
+        """
+
+        ref, alt = variant_dict['REF'], variant_dict['ALT']
+        variant_dict['variant_type'] = get_variant_type(ref, alt)
+
+        variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
+
+        start, end = get_variant_start_and_end_positions(variant_dict['POS'],
+                                                         ref, alt)
+        variant_dict['start'] = start
+        variant_dict['end'] = end
