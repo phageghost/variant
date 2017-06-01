@@ -101,19 +101,19 @@ class VariantHDF5:
                 data_start_position = f.tell()
                 line = f.readline()
 
-            print('Counting variants in chromosomes ...')
-            chrom_n_rows = defaultdict(lambda: 0)
-            chrom = None
-            while line:
-                a_chrom = line.split('\t')[0]
-
-                if a_chrom != chrom:
-                    print('\t@ {} ...'.format(a_chrom))
-                    chrom = a_chrom
-
-                chrom_n_rows[a_chrom] += 1
-                line = f.readline()
-            pprint(chrom_n_rows)
+            # print('Counting variants in chromosomes ...')
+            # chrom_n_rows = defaultdict(lambda: 0)
+            # chrom = None
+            # while line:
+            #     a_chrom = line.split('\t')[0]
+            #
+            #     if a_chrom != chrom:
+            #         print('\t@ {} ...'.format(a_chrom))
+            #         chrom = a_chrom
+            #
+            #     chrom_n_rows[a_chrom] += 1
+            #     line = f.readline()
+            # pprint(chrom_n_rows)
 
             print('Making variant HDF5 ...')
             with open_file(
@@ -140,7 +140,7 @@ class VariantHDF5:
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                            expectedrows=chrom_n_rows[chrom])
+                        )  # expectedrows=chrom_n_rows[chrom])
                         print('\t\tMade {} table.'.format(chrom_table.name))
 
                         chrom_table_to_row_dict[chrom] = chrom_table.row
@@ -222,16 +222,16 @@ class VariantHDF5:
         # TODO: Match with VCF specification
         CHROM = StringCol(8)
         POS = Int32Col()
-        ID = StringCol(8)
+        ID = StringCol(16)
         REF = StringCol(256)
         ALT = StringCol(256)
         QUAL = Float32Col()
         # INFO
-        CLNSIG = Int32Col()
+        CLNSIG = StringCol(8)
         # INFO ANN
-        effect = StringCol(8)
+        effect = StringCol(16)
         impact = StringCol(8)
-        gene_name = StringCol(8)
+        gene_name = StringCol(16)
         # FORMAT & sample
         genotype = StringCol(256)
 

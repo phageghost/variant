@@ -97,6 +97,18 @@ VCF_COLUMNS = [
     'FORMAT',
 ]
 
+CLNSIG_DESCRIPTIONS = {
+    0: 'unknown',
+    1: 'untested',
+    2: 'non-pathogenic',
+    3: 'probable-non-pathogenic',
+    4: 'probable-pathogenic',
+    5: 'pathogenic',
+    6: 'drug-response',
+    7: 'histocompatibility',
+    255: 'other',
+}
+
 VCF_ANN_FIELDS = [
     'ALT',
     'effect',
@@ -268,7 +280,7 @@ def cast_vcf_field_value(field, value):
 
     # TODO: Create automatically based on the .VCF meta information
 
-    if field in ('POS', 'CLNSIG', 'DP'):
+    if field in ('POS', 'DP'):
         return int(value)
 
     elif field == 'QUAL':
@@ -349,71 +361,14 @@ def get_variant_type(ref, alt):
     return variant_type
 
 
-def get_genotype(ref, alt, gt=None, format_=None, sample=None):
-    """
-    Get genotype.
-    :param ref: str; reference allele
-    :param alt: str; alternate allele
-    :param gt: str; .VCF sample GT
-    :param format_: str; .VCF FORMAT
-    :param sample: str; .VCF sample
-    :return: str; '0|1' | '1|1'
-    """
-
-    if not gt:
-        format_split = format_.split(':')
-        sample_split = sample.split(':')
-
-        for f, v in zip(format_split, sample_split):
-            if f == 'GT':
-                gt = v
-
-    gt.replace('/', '|')
-
-    ref_alts = [ref] + alt.split(',')
-
-    return '|'.join([ref_alts[int(a_gt)] for a_gt in gt.split('|')])
-
-
-def get_allelic_frequencies(ad=None, dp=None, format_=None, sample=None):
-    """
-    Compute allelic frequency (INFO's AF is a rounded allelic frequency).
-    :param ad: str; .VCF sample AD
-    :param dp: str; .VCF sample DP
-    :param format_: str; .VCF FORMAT
-    :param sample: str; .VCF sample
-    :return: str; 'allelic_frequency_0|allelic_frequency_1'
-    """
-
-    if not (ad or dp):
-        format_split = format_.split(':')
-        sample_split = sample.split(':')
-
-        ad = cast_vcf_field_value('AD', sample_split[format_split.index('AD')])
-        dp = cast_vcf_field_value('DP', sample_split[format_split.index('DP')])
-
-    return '|'.join(
-        ['{:.3f}'.format(int(an_ad) / dp) for an_ad in ad.split(',')])
-
-
-def describe_clnsig(clnsig):
+def describe_clnsig(clnsig, clnsig_descriptions=CLNSIG_DESCRIPTIONS):
     """
     Describe CLNSIG.
-    :param clnsig: int; 0 | 1 | 2 | 4 | 5 | 6 | 7 | 255
+    :param clnsig: str; '|' separated: 0 | 1 | 2 | 4 | 5 | 6 | 7 | 255
     :return str; CLNSIG description
     """
 
-    return {
-        0: 'unknown',
-        1: 'untested',
-        2: 'non-pathogenic',
-        3: 'probable-non-pathogenic',
-        4: 'probable-pathogenic',
-        5: 'pathogenic',
-        6: 'drug-response',
-        7: 'histocompatibility',
-        255: 'other',
-    }[clnsig]
+    return '|'.join([clnsig_descriptions[int(c)] for c in clnsig.split('|')])
 
 
 def get_variant_classification(effect, ref, alt):
@@ -611,3 +566,50 @@ def get_mutsig_effect(variant_classification):
         'upstream': 'noncoding',
         'upstream;downstream': 'noncoding',
     }[variant_classification]
+
+
+def get_genotype(ref, alt, gt=None, format_=None, sample=None):
+    """
+    Get genotype.
+    :param ref: str; reference allele
+    :param alt: str; alternate allele
+    :param gt: str; .VCF sample GT
+    :param format_: str; .VCF FORMAT
+    :param sample: str; .VCF sample
+    :return: str; '0|1' | '1|1'
+    """
+
+    if not gt:
+        format_split = format_.split(':')
+        sample_split = sample.split(':')
+
+        for f, v in zip(format_split, sample_split):
+            if f == 'GT':
+                gt = v
+
+    gt = gt.replace('/', '|')
+
+    ref_alts = [ref] + alt.split(',')
+
+    return '|'.join([ref_alts[int(a_gt)] for a_gt in gt.split('|')])
+
+
+def get_allelic_frequencies(ad=None, dp=None, format_=None, sample=None):
+    """
+    Compute allelic frequency (INFO's AF is a rounded allelic frequency).
+    :param ad: str; .VCF sample AD
+    :param dp: str; .VCF sample DP
+    :param format_: str; .VCF FORMAT
+    :param sample: str; .VCF sample
+    :return: str; 'allelic_frequency_0|allelic_frequency_1'
+    """
+
+    if not (ad or dp):
+        format_split = format_.split(':')
+        sample_split = sample.split(':')
+
+        ad = cast_vcf_field_value('AD', sample_split[format_split.index('AD')])
+        dp = cast_vcf_field_value('DP', sample_split[format_split.index('DP')])
+
+    return '|'.join(
+        ['{:.3f}'.format(int(an_ad) / dp) for an_ad in ad.split(',')])
