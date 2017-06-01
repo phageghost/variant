@@ -101,19 +101,19 @@ class VariantHDF5:
                 data_start_position = f.tell()
                 line = f.readline()
 
-            # print('Counting variants in chromosomes ...')
-            # chrom_n_rows = defaultdict(lambda: 0)
-            # chrom = None
-            # while line:
-            #     a_chrom = line.split('\t')[0]
-            #
-            #     if a_chrom != chrom:
-            #         print('\t@ {} ...'.format(a_chrom))
-            #         chrom = a_chrom
-            #
-            #     chrom_n_rows[a_chrom] += 1
-            #     line = f.readline()
-            # pprint(chrom_n_rows)
+            print('Counting variants in chromosomes ...')
+            chrom_n_rows = defaultdict(lambda: 0)
+            chrom = None
+            while line:
+                a_chrom = line.split('\t')[0]
+
+                if a_chrom != chrom:
+                    print('\t@ {} ...'.format(a_chrom))
+                    chrom = a_chrom
+
+                chrom_n_rows[a_chrom] += 1
+                line = f.readline()
+            pprint(chrom_n_rows)
 
             print('Making variant HDF5 ...')
             with open_file(
@@ -140,7 +140,7 @@ class VariantHDF5:
                             '/',
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
-                        )  # expectedrows=chrom_n_rows[chrom])
+                            expectedrows=chrom_n_rows[chrom])
                         print('\t\tMade {} table.'.format(chrom_table.name))
 
                         chrom_table_to_row_dict[chrom] = chrom_table.row
@@ -363,11 +363,11 @@ class VariantHDF5:
 
         return dicts
 
-    def make_variant_dict_consistent(
+    def _make_variant_dict_consistent(
             self,
             variant_dict,
             ann_fields=('effect', 'impact', 'gene_name'),
-            sample_fields=('genotype')):
+            sample_fields=('genotype', )):
         """
         Update .VCF variant dict in place.
         :param dict; variant dict
@@ -375,6 +375,11 @@ class VariantHDF5:
         :param sample_fields: tuple; variant_dict['sample'][0] = {...}
         :return: None
         """
+
+        for k, v in variant_dict.items():
+            if not v:
+                del variant_dict[k]
+
         variant_dict['ANN'] = {
             field: variant_dict.pop(field)
             for field in ann_fields
