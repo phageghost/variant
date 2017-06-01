@@ -262,7 +262,7 @@ def get_vcf_anns(fields, vcf_row=None, info=None):
     :return: list; of str field value
     """
 
-    ann = get_vcf_infos(['ANN'], vcf_row=vcf_row, info=info)[0]
+    ann = get_vcf_infos(['ANN'], vcf_row=vcf_row, info=info).pop()
 
     # Variant can have multiple ANNs, but use the 1st ANN
     ann_split = ann.split(',')[0].split('|')
