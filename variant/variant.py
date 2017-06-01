@@ -219,10 +219,12 @@ def update_vcf_variant_dict(variant_dict):
 
     for i, d in variant_dict['sample'].items():
 
-        d['genotype'] = get_genotype(ref, alt, gt=d['GT'])
+        if 'GT' in d:
+            d['genotype'] = get_genotype(ref, alt, gt=d['GT'])
 
-        d['allelic_frequency'] = get_allelic_frequencies(
-            ad=d['AD'], dp=d['DP'])
+        if 'AD' in d and 'DP':
+            d['allelic_frequency'] = get_allelic_frequencies(
+                ad=d['AD'], dp=d['DP'])
 
 
 def get_vcf_infos(fields, vcf_row=None, info=None):
