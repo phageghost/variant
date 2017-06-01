@@ -1,5 +1,3 @@
-from re import split
-
 VARIANT_EFFECT_RANKING = [
     # Loss of transcript or exon
     'transcript_ablation',
@@ -126,32 +124,34 @@ def parse_vcf_row(vcf_row):
     """
     Parse .VCF row and make a variant dict.
     :param vcf_row: iterable;
-    :return: dict; variant dict; won't have missing non-main field
+    :return: dict; variant dict;
     """
 
-    # CHROM, ID, REF, ALT, QUAL, FILTER
+    # CHROM, POS, ID, REF, ALT, QUAL, FILTER
     variant_dict = {
         field: cast_vcf_field_value(field, vcf_row[i])
         for (i, field) in enumerate(VCF_COLUMNS[:7])
     }
 
-    ref = variant_dict['REF']
-    alt = variant_dict['ALT']
-
-    # Variant type
-    variant_dict['variant_type'] = get_variant_type(ref, alt)
-
     # INFO
-    for info in vcf_row[7].split(';'):
-        field, value = info.split('=')
+    for i in vcf_row[7].split(';'):
 
-        if field == 'ANN':
-            # Use 1st ANN
-            a = value.split(',')[0].split('|')
-            variant_dict['ANN'] = {
-                VCF_ANN_FIELDS[i]: a[i]
-                for i in range(1, 15)
-            }
+        field, value = i.split('=')
+
+        if field == 'ANN':  # ANN
+
+            # Each ANN is a dict
+            ann_dict = {}
+
+            for j, ann in enumerate(value.split(',')):
+
+                ann_split = ann.split('|')
+                ann_dict[j] = {
+                    VCF_ANN_FIELDS[k]: ann_split[k]
+                    for k in range(1, 16)
+                }
+
+            variant_dict['ANN'] = ann_dict
 
         else:
             variant_dict[field] = cast_vcf_field_value(field, value)
@@ -161,27 +161,50 @@ def parse_vcf_row(vcf_row):
     format_split = format_.split(':')
 
     # Samples
-    variant_dict['samples'] = []
     for i, sample in enumerate(vcf_row[9:]):
 
         # Each sample is a dict
-        sample_dict = {'sample_id': i + 1}
+        sample_dict = {}
 
         for field, value in zip(format_split, sample.split(':')):
-            sample_dict[field] = cast_vcf_field_value(field, value)
+            sample_dict[i][field] = cast_vcf_field_value(field, value)
 
-        # Genotype
-        ref_alts = [ref] + alt.split(',')
-        sample_dict[
-            'genotype'] = [ref_alts[int(gt)] for gt in sample_dict['GT']]
-
-        # Allelic frequency
-        sample_dict['allelic_frequency'] = get_allelic_frequencies(format_,
-                                                                   sample)
-
-        variant_dict['samples'].append(sample_dict)
+        variant_dict['sample'] = sample_dict
 
     return variant_dict
+
+
+def update_vcf_variant_dict(self, variant_dict):
+    """
+    Update .VCF variant dict: add variant_type, clinvar, start, & end fields.
+    :param dict; variant dict
+    :return: None
+    """
+
+    ref, alt = variant_dict['REF'], variant_dict['ALT']
+
+    variant_dict['variant_type'] = get_variant_type(ref, alt)
+
+    start, end = get_start_and_end_positions(variant_dict['POS'], ref, alt)
+    variant_dict['start'] = start
+    variant_dict['end'] = end
+
+    variant_dict['confidence'] = 10**(-variant_dict['QUAL'] / 10)
+
+    variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
+
+    for i, d in variant_dict['ANN'].items():
+        d['variant_classification'] = get_variant_classification(d['effect'],
+                                                                 ref, alt)
+
+    ref_alts = [ref] + alt.split(',')
+    for i, d in variant_dict['sample'].items():
+
+        # asdfasdfasdfasdfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        d['genotype'] = '|'.join(
+            [ref_alts[int(gt)] for gt in variant_dict['GT']])
+
+        d['allelic_frequency'] = get_allelic_frequencies(format_, sample)
 
 
 def get_vcf_infos(fields, vcf_row=None, info=None):
@@ -200,7 +223,6 @@ def get_vcf_infos(fields, vcf_row=None, info=None):
     for fv in info.split(';'):  # For each INFO
 
         if '=' not in fv:  # Some fields are not in field=value format
-            # print('{} not in FIELD=VALUE in INFO.'.format(fv))
             continue
 
         f, v = fv.split('=')
@@ -235,19 +257,21 @@ def cast_vcf_field_value(field, value):
     Cast .VCF field's value.
     :param field: str; field
     :param value: str; value
-    :return: int | float | tuple;
+    :return: int | float | str;
     """
 
-    c = {
-        'POS': int,
-        'QUAL': float,
-        'CLNSIG': lambda v: max([int(s) for s in split('[,|]', v)]),
-        'GT': lambda v: [int(s) for s in split('[|/]', v)],
-        'AD': lambda v: v.split(','),
-    }.get(field)
+    if field in ('POS', 'CLNSIG'):
+        return int(value)
 
-    if callable(c):
-        return c(value)
+    elif field == 'QUAL':
+        return float(value)
+
+    elif field == 'GT':
+        return value.replace('/', '|')
+
+    elif field == 'AD':
+        return value.replace(',', '|')
+
     else:
         return value
 
@@ -260,19 +284,19 @@ def get_start_and_end_positions(pos, ref, alt):
     Get variant start and end position.
     :param ref: str; reference allele
     :param alt: str; alternate allele
-    :return: tuple; of ints; (start, end)
+    :return: int & int; start & end positions
     """
 
     if len(ref) == len(alt):
-        s, e = pos, pos + len(alt) - 1
+        start, end = pos, pos + len(alt) - 1
 
     elif len(ref) < len(alt):
-        s, e = pos, pos + 1
+        start, end = pos, pos + 1
 
     else:  # len(alt) < len(ref)
-        s, e = pos + 1, pos + len(ref) - len(alt)
+        start, end = pos + 1, pos + len(ref) - len(alt)
 
-    return s, e
+    return start, end
 
 
 def is_inframe(ref, alt):
@@ -336,7 +360,7 @@ def get_genotype(format_, sample):
             return s.replace('/', '|')
 
 
-def get_allelic_frequencies(format_, sample):
+def get_allelic_frequencies(format_=None, sample=None, ad=None, dp=None):
     """
     Compute allelic frequency (INFO's AF is a rounded allelic frequency).
     :param format_: str; .VCF FORMAT
@@ -344,16 +368,17 @@ def get_allelic_frequencies(format_, sample):
     :return: list; of allelic frequencies
     """
 
-    format_split = format_.split(':')
-    sample_split = sample.split(':')
+    if not (ad or dp):
+        format_split = format_.split(':')
+        sample_split = sample.split(':')
 
-    ad_i = format_split.index('AD')
-    dp_i = format_split.index('DP')
+        ad_i = format_split.index('AD')
+        dp_i = format_split.index('DP')
 
-    ads = [int(ad) for ad in sample_split[ad_i]]
-    dp = int(sample_split[dp_i])
+        ad = [int(ad) for ad in sample_split[ad_i]]
+        dp = int(sample_split[dp_i])
 
-    return ['{:.3f}'.format(ad / dp) for ad in ads]
+    return ['{:.3f}'.format(an_ad / dp) for an_ad in ad]
 
 
 def describe_clnsig(clnsig):
@@ -374,3 +399,200 @@ def describe_clnsig(clnsig):
         7: 'histocompatibility',
         255: 'other',
     }[clnsig]
+
+
+def get_variant_classification(effect, ref, alt):
+    """
+    Convert .VCF ANN effect to .MAF variant classification.
+    :param ref: str; reference allele
+    :param alt: str; alternate allele
+    :return: str; .MAF variant classification
+    """
+
+    variant_type = get_variant_type(ref, alt)
+    inframe = is_inframe(ref, alt)
+
+    if effect in (
+            'transcript_ablation',
+            'exon_loss_variant',
+            'splice_acceptor_variant',
+            'splice_donor_variant', ):
+        variant_classification = 'Splice_Site'
+
+    elif effect in ('stop_gained', ):
+        variant_classification = 'Nonsense_Mutation'
+
+    elif variant_type == 'INS' and (effect == 'frameshift_variant' or
+                                    (not inframe and effect in (
+                                        'protein_protein_contact',
+                                        'protein_altering_variant', ))):
+        variant_classification = 'Frame_Shift_Ins'
+
+    elif variant_type == 'DEL' and (effect == 'frameshift_variant' or
+                                    (not inframe and effect in (
+                                        'protein_protein_contact',
+                                        'protein_altering_variant', ))):
+        variant_classification = 'Frame_Shift_Del'
+
+    elif effect in ('stop_lost', ):
+        variant_classification = 'Nonstop_Mutation'
+
+    elif effect in (
+            'start_lost',
+            'initiator_codon_variant', ):
+        variant_classification = 'Translation_Start_Site'
+
+    elif variant_type == 'INS' and inframe and effect in (
+            'protein_protein_contact',
+            'disruptive_inframe_insertion',
+            'inframe_insertion',
+            'protein_altering_variant', ):
+        variant_classification = 'In_Frame_Ins'
+
+    elif variant_type == 'DEL' and inframe and effect in (
+            'protein_protein_contact',
+            'disruptive_inframe_deletion',
+            'inframe_deletion',
+            'protein_altering_variant', ):
+        variant_classification = 'In_Frame_Del'
+
+    elif effect in (
+            'transcript_variant',
+            'conservative_missense_variant',
+            'rare_amino_acid_variant',
+            'missense_variant',
+            'coding_sequence_variant', ) or (
+                variant_type not in ('INS', 'DEL') and
+                effect == 'protein_protein_contact'):
+        variant_classification = 'Missense_Mutation'
+
+    elif effect in (
+            'transcript_amplification',
+            'splice_region_variant',
+            'intragenic_variant',
+            'conserved_intron_variant',
+            'intron_variant',
+            'INTRAGENIC', ):
+        variant_classification = 'Intron'
+
+    elif effect in (
+            'incomplete_terminal_codon_variant',
+            'start_retained_variant',
+            'stop_retained_variant',
+            'synonymous_variant',
+            'NMD_transcript_variant', ):
+        variant_classification = 'Silent'
+
+    elif effect in (
+            'exon_variant',
+            'mature_miRNA_variant',
+            'non_coding_exon_variant',
+            'non_coding_transcript_exon_variant',
+            'non_coding_transcript_variant',
+            'nc_transcript_variant', ):
+        variant_classification = 'RNA'
+
+    elif effect in (
+            '5_prime_UTR_variant',
+            '5_prime_UTR_premature_start_codon_gain_variant', ):
+        variant_classification = '5\'UTR'
+
+    elif effect in ('3_prime_UTR_variant', ):
+        variant_classification = '3\'UTR'
+
+    elif effect in (
+            'TF_binding_site_ablation',
+            'TFBS_ablation',
+            'TF_binding_site_amplification',
+            'TFBS_amplification',
+            'TF_binding_site_variant',
+            'TFBS_variant',
+            'regulatory_region_ablation',
+            'regulatory_region_amplification',
+            'regulatory_region_variant',
+            'regulatory_region',
+            'feature_elongation',
+            'feature_truncation',
+            'conserved_intergenic_variant',
+            'intergenic_variant',
+            'intergenic_region', ):
+        variant_classification = 'IGR'
+
+    elif effect in ('upstream_gene_variant', ):
+        variant_classification = '5\'Flank'
+
+    elif effect in ('downstream_gene_variant', ):
+        variant_classification = '3\'Flank'
+
+    elif effect in ('sequence_feature', ):
+        variant_classification = 'Targeted_Region'
+
+    else:
+        print('Unknown: effect={} & variant_type={} & inframe={}.'.format(
+            effect, variant_type, inframe))
+        variant_classification = 'Targeted_Region'
+
+    return variant_classification
+
+
+def get_mutsig_effect(variant_classification):
+    """
+    Convert .MAF variant classification to MUTSIG effect.
+    :param variant_classification: str; .MAF variant classification
+    :return: str; 'noncoding' | 'null' | 'silent' | 'nonsilent' | 'effect'
+    """
+
+    return {
+        '3\'-UTR': 'noncoding',
+        '3\'Flank': 'noncoding',
+        '3\'Promoter': 'noncoding',
+        '3\'UTR': 'noncoding',
+        '5\'-Flank': 'noncoding',
+        '5\'-UTR': 'noncoding',
+        '5\'Flank': 'noncoding',
+        '5\'Promoter': 'noncoding',
+        '5\'UTR': 'noncoding',
+        'De_novo_Start': 'null',
+        'De_novo_Start_InFrame': 'null',
+        'De_novo_Start_OutOfFrame': 'null',
+        'Frame_Shift_Del': 'null',
+        'Frame_Shift_Ins': 'null',
+        'IGR': 'noncoding',
+        'In_Frame_Del': 'null',
+        'In_Frame_Ins': 'null',
+        'Intron': 'noncoding',
+        'Missense': 'nonsilent',
+        'Missense_Mutation': 'nonsilent',
+        'NCSD': 'noncoding',
+        'Non-coding_Transcript': 'noncoding',
+        'Nonsense': 'null',
+        'Nonsense_Mutation': 'null',
+        'Nonstop_Mutation': 'null',
+        'Promoter': 'noncoding',
+        'RNA': 'noncoding',
+        'Read-through': 'null',
+        'Silent': 'silent',
+        'Splice': 'null',
+        'Splice_Region': 'null',
+        'Splice_Site': 'null',
+        'Splice_Site_DNP': 'null',
+        'Splice_Site_Del': 'null',
+        'Splice_Site_Ins': 'null',
+        'Splice_Site_ONP': 'null',
+        'Splice_Site_SNP': 'null',
+        'Start_Codon_DNP': 'null',
+        'Start_Codon_Del': 'null',
+        'Start_Codon_Ins': 'null',
+        'Start_Codon_ONP': 'null',
+        'Stop_Codon_DNP': 'null',
+        'Stop_Codon_Del': 'null',
+        'Stop_Codon_Ins': 'null',
+        'Synonymous': 'silent',
+        'Targeted_Region': 'silent',
+        'Translation_Start_Site': 'null',
+        'Variant_Classification': 'effect',
+        'downstream': 'noncoding',
+        'miRNA': 'noncoding',
+        'upstream': 'noncoding',
+        'upstream;downstream': 'noncoding',
+    }[variant_classification]

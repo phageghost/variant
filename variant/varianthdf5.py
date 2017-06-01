@@ -6,9 +6,10 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .maf import convert_ann_effect_to_maf_variant_classification
-from .variant import (describe_clnsig, get_vcf_anns, get_genotype, get_vcf_infos,
-                      get_start_and_end_positions, get_variant_type)
+from .maf import get_variant_classification
+from .variant import (describe_clnsig, get_genotype,
+                      get_start_and_end_positions, get_variant_type,
+                      get_vcf_anns, get_vcf_infos)
 
 
 class VariantHDF5:
@@ -132,8 +133,8 @@ class VariantHDF5:
                         print('\t@ {} ...'.format(i + 1))
 
                     # Parse .VCF row
-                    chrom, pos, id_, ref, alt, qual, filter_, info, format_, sample = line.split(
-                        '\t')
+                    chrom, pos, id_, ref, alt, qual, filter_, info, format_,\
+                        sample = line.split('\t')
 
                     if chrom not in chrom_table_to_row_dict:  # Make table
 
@@ -360,20 +361,3 @@ class VariantHDF5:
             dicts.append(dict_)
 
         return dicts
-
-    def _update_variant_dict(self, variant_dict):
-        """
-        Update variant_dict: add variant_type, clinvar, start, & end fields.
-        :param dict; variant dict
-        :return: None
-        """
-
-        ref, alt = variant_dict['REF'], variant_dict['ALT']
-        variant_dict['variant_type'] = get_variant_type(ref, alt)
-        variant_dict['maf_variant_classification'] = convert_ann_effect_to_maf_variant_classification()
-
-        variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
-
-        start, end = get_start_and_end_positions(variant_dict['POS'], ref, alt)
-        variant_dict['start'] = start
-        variant_dict['end'] = end
