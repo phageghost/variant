@@ -81,8 +81,7 @@ def make_maf_from_vcf(vcf,
         variant_classification = get_variant_classification(
             effect, variant_type, inframe)
 
-        tmp[i] = gene_name, entrez_gene_id, chrom, start, end,\
-            variant_classification, variant_type, id_, ref, alt
+        tmp[i] = gene_name, entrez_gene_id, chrom, start, end, variant_classification, variant_type, id_, ref, alt
 
     maf[[
         'Hugo_Symbol',

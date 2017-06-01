@@ -6,10 +6,8 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .maf import get_variant_classification
-from .variant import (describe_clnsig, get_genotype,
-                      get_start_and_end_positions, get_variant_type,
-                      get_vcf_anns, get_vcf_infos)
+from .variant import (get_genotype, get_vcf_anns, get_vcf_infos,
+                      update_vcf_variant_dict)
 
 
 class VariantHDF5:
@@ -133,8 +131,8 @@ class VariantHDF5:
                         print('\t@ {} ...'.format(i + 1))
 
                     # Parse .VCF row
-                    chrom, pos, id_, ref, alt, qual, filter_, info, format_,\
-                        sample = line.split('\t')
+                    chrom, pos, id_, ref, alt, qual, filter_, info, format_, sample = line.split(
+                        '\t')
 
                     if chrom not in chrom_table_to_row_dict:  # Make table
 
@@ -173,7 +171,8 @@ class VariantHDF5:
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
 
-                    cursor['GT'] = get_genotype(format_, sample)
+                    cursor['genotype'] = get_genotype(
+                        ref, alt, format_=format_, sample=sample)
 
                     cursor.append()
 
@@ -201,7 +200,7 @@ class VariantHDF5:
                             'effect',
                             'impact',
                             'gene_name',
-                            'GT',
+                            'genotype',
                     ]:
                         chrom_table.cols._f_col(col).create_csindex()
 
@@ -222,20 +221,19 @@ class VariantHDF5:
         # TODO: Refactor
         # TODO: Match with VCF specification
         CHROM = StringCol(8)
-        ID = StringCol(16)
+        POS = Int32Col()
+        ID = StringCol(8)
         REF = StringCol(256)
         ALT = StringCol(256)
         QUAL = Float32Col()
-        # POS
-        POS = Int32Col()
         # INFO
         CLNSIG = Int32Col()
         # INFO ANN
-        effect = StringCol(64)
+        effect = StringCol(8)
         impact = StringCol(8)
-        gene_name = StringCol(16)
-        # FORMAT & SAMPLE
-        GT = StringCol(16)
+        gene_name = StringCol(8)
+        # FORMAT & sample
+        genotype = StringCol(256)
 
     def _read_id_to_chrom_dict(self):
         """
@@ -291,7 +289,8 @@ class VariantHDF5:
                                              "ID == b'{}'".format(id_))
 
             for d in variant_dicts:
-                self._update_variant_dict(d)
+                self._make_variant_dict_consistent(d)
+                update_vcf_variant_dict(d)
 
             return variant_dicts
 
@@ -313,6 +312,7 @@ class VariantHDF5:
                                              "gene_name == b'{}'".format(gene))
 
             for d in variant_dicts:
+                self._make_variant_dict_consistent(d)
                 self._update_variant_dict(d)
 
             return variant_dicts
@@ -334,6 +334,7 @@ class VariantHDF5:
             chrom_table, '({} <= POS) & (POS <= {})'.format(start, end))
 
         for d in variant_dicts:
+            self._make_variant_dict_consistent(d)
             self._update_variant_dict(d)
 
         return variant_dicts
@@ -361,3 +362,24 @@ class VariantHDF5:
             dicts.append(dict_)
 
         return dicts
+
+    def make_variant_dict_consistent(
+            self,
+            variant_dict,
+            ann_fields=('effect', 'impact', 'gene_name'),
+            sample_fields=('genotype')):
+        """
+        Update .VCF variant dict in place.
+        :param dict; variant dict
+        :param ann_fields: tuple; variant_dict['ANN'] = {...}
+        :param sample_fields: tuple; variant_dict['sample'][0] = {...}
+        :return: None
+        """
+        variant_dict['ANN'] = {
+            field: variant_dict.pop(field)
+            for field in ann_fields
+        }
+        variant_dict['sample'] = {
+            0: {field: variant_dict.pop(field)
+                for field in sample_fields}
+        }

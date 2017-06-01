@@ -136,6 +136,9 @@ def parse_vcf_row(vcf_row):
     # INFO
     for i in vcf_row[7].split(';'):
 
+        if '=' not in i:  # Some fields are not in field=value format
+            continue
+
         field, value = i.split('=')
 
         if field == 'ANN':  # ANN
@@ -161,22 +164,26 @@ def parse_vcf_row(vcf_row):
     format_split = format_.split(':')
 
     # Samples
-    for i, sample in enumerate(vcf_row[9:]):
+    if 9 < len(vcf_row):
 
         # Each sample is a dict
         sample_dict = {}
 
-        for field, value in zip(format_split, sample.split(':')):
-            sample_dict[i][field] = cast_vcf_field_value(field, value)
+        for i, sample in enumerate(vcf_row[9:]):
+
+            sample_dict[i] = {
+                field: cast_vcf_field_value(field, value)
+                for field, value in zip(format_split, sample.split(':'))
+            }
 
         variant_dict['sample'] = sample_dict
 
     return variant_dict
 
 
-def update_vcf_variant_dict(self, variant_dict):
+def update_vcf_variant_dict(variant_dict):
     """
-    Update .VCF variant dict: add variant_type, clinvar, start, & end fields.
+    Update .VCF variant dict in place.
     :param dict; variant dict
     :return: None
     """
@@ -191,20 +198,19 @@ def update_vcf_variant_dict(self, variant_dict):
 
     variant_dict['confidence'] = 10**(-variant_dict['QUAL'] / 10)
 
-    variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
+    if 'CLNSIG' in variant_dict:
+        variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
 
     for i, d in variant_dict['ANN'].items():
         d['variant_classification'] = get_variant_classification(d['effect'],
                                                                  ref, alt)
 
-    ref_alts = [ref] + alt.split(',')
     for i, d in variant_dict['sample'].items():
 
-        # asdfasdfasdfasdfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-        d['genotype'] = '|'.join(
-            [ref_alts[int(gt)] for gt in variant_dict['GT']])
+        d['genotype'] = get_genotype(ref, alt, gt=d['GT'])
 
-        d['allelic_frequency'] = get_allelic_frequencies(format_, sample)
+        d['allelic_frequency'] = get_allelic_frequencies(
+            ad=d['AD'], dp=d['DP'])
 
 
 def get_vcf_infos(fields, vcf_row=None, info=None):
@@ -220,14 +226,14 @@ def get_vcf_infos(fields, vcf_row=None, info=None):
         info = vcf_row[7]
 
     values = []
-    for fv in info.split(';'):  # For each INFO
+    for i in info.split(';'):  # For each INFO
 
-        if '=' not in fv:  # Some fields are not in field=value format
+        if '=' not in i:  # Some fields are not in field=value format
             continue
 
-        f, v = fv.split('=')
-        if f in fields:
-            values.append(cast_vcf_field_value(f, v))
+        field, value = i.split('=')
+        if field in fields:
+            values.append(cast_vcf_field_value(field, value))
 
     return values
 
@@ -249,7 +255,7 @@ def get_vcf_anns(fields, vcf_row=None, info=None):
     # Variant can have multiple ANNs, but use the 1st ANN
     ann_split = ann.split(',')[0].split('|')
 
-    return [ann_split[VCF_ANN_FIELDS.index(f)] for f in fields]
+    return [ann_split[VCF_ANN_FIELDS.index(field)] for field in fields]
 
 
 def cast_vcf_field_value(field, value):
@@ -260,7 +266,9 @@ def cast_vcf_field_value(field, value):
     :return: int | float | str;
     """
 
-    if field in ('POS', 'CLNSIG'):
+    # TODO: Create automatically based on the .VCF meta information
+
+    if field in ('POS', 'CLNSIG', 'DP'):
         return int(value)
 
     elif field == 'QUAL':
@@ -268,9 +276,6 @@ def cast_vcf_field_value(field, value):
 
     elif field == 'GT':
         return value.replace('/', '|')
-
-    elif field == 'AD':
-        return value.replace(',', '|')
 
     else:
         return value
@@ -344,41 +349,51 @@ def get_variant_type(ref, alt):
     return variant_type
 
 
-def get_genotype(format_, sample):
+def get_genotype(ref, alt, gt=None, format_=None, sample=None):
     """
     Get genotype.
+    :param ref: str; reference allele
+    :param alt: str; alternate allele
+    :param gt: str; .VCF sample GT
     :param format_: str; .VCF FORMAT
     :param sample: str; .VCF sample
     :return: str; '0|1' | '1|1'
     """
 
-    format_split = format_.split(':')
-    sample_split = sample.split(':')
+    if not gt:
+        format_split = format_.split(':')
+        sample_split = sample.split(':')
 
-    for f, s in zip(format_split, sample_split):
-        if f == 'GT':
-            return s.replace('/', '|')
+        for f, v in zip(format_split, sample_split):
+            if f == 'GT':
+                gt = v
+
+    gt.replace('/', '|')
+
+    ref_alts = [ref] + alt.split(',')
+
+    return '|'.join([ref_alts[int(a_gt)] for a_gt in gt.split('|')])
 
 
-def get_allelic_frequencies(format_=None, sample=None, ad=None, dp=None):
+def get_allelic_frequencies(ad=None, dp=None, format_=None, sample=None):
     """
     Compute allelic frequency (INFO's AF is a rounded allelic frequency).
+    :param ad: str; .VCF sample AD
+    :param dp: str; .VCF sample DP
     :param format_: str; .VCF FORMAT
     :param sample: str; .VCF sample
-    :return: list; of allelic frequencies
+    :return: str; 'allelic_frequency_0|allelic_frequency_1'
     """
 
     if not (ad or dp):
         format_split = format_.split(':')
         sample_split = sample.split(':')
 
-        ad_i = format_split.index('AD')
-        dp_i = format_split.index('DP')
+        ad = cast_vcf_field_value('AD', sample_split[format_split.index('AD')])
+        dp = cast_vcf_field_value('DP', sample_split[format_split.index('DP')])
 
-        ad = [int(ad) for ad in sample_split[ad_i]]
-        dp = int(sample_split[dp_i])
-
-    return ['{:.3f}'.format(an_ad / dp) for an_ad in ad]
+    return '|'.join(
+        ['{:.3f}'.format(int(an_ad) / dp) for an_ad in ad.split(',')])
 
 
 def describe_clnsig(clnsig):

@@ -1,6 +1,6 @@
 from tabix import open
 
-from .variant import parse_vcf_row
+from .variant import parse_vcf_row, update_vcf_variant_dict
 
 
 def get_variants_by_tabix(sample_vcf,
@@ -42,4 +42,9 @@ def get_variants_by_tabix(sample_vcf,
         else:
             records = reference_vcf.query(chrom, start - 1, end)
 
-    return [parse_vcf_row(r) for r in records]
+    varinat_dicts = [parse_vcf_row(r) for r in records]
+
+    for d in varinat_dicts:
+        update_vcf_variant_dict(d)
+
+    return varinat_dicts
