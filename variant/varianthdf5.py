@@ -6,8 +6,9 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (describe_clnsig, get_anns, get_genotype, get_infos,
-                      get_variant_start_and_end_positions, get_variant_type)
+from .maf import convert_ann_effect_to_maf_variant_classification
+from .variant import (describe_clnsig, get_vcf_anns, get_genotype, get_vcf_infos,
+                      get_start_and_end_positions, get_variant_type)
 
 
 class VariantHDF5:
@@ -160,12 +161,12 @@ class VariantHDF5:
 
                     cursor['QUAL'] = qual
 
-                    clnsig = get_infos(['CLNSIG'], info=info)
+                    clnsig = get_vcf_infos(['CLNSIG'], info=info)
                     if clnsig:
                         clnsig = clnsig[0]
                         cursor['CLNSIG'] = clnsig
 
-                    effect, impact, gene_name = get_anns(
+                    effect, impact, gene_name = get_vcf_anns(
                         ['effect', 'impact', 'gene_name'], info=info)
                     cursor['effect'] = effect
                     cursor['impact'] = impact
@@ -369,10 +370,10 @@ class VariantHDF5:
 
         ref, alt = variant_dict['REF'], variant_dict['ALT']
         variant_dict['variant_type'] = get_variant_type(ref, alt)
+        variant_dict['maf_variant_classification'] = convert_ann_effect_to_maf_variant_classification()
 
         variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
 
-        start, end = get_variant_start_and_end_positions(variant_dict['POS'],
-                                                         ref, alt)
+        start, end = get_start_and_end_positions(variant_dict['POS'], ref, alt)
         variant_dict['start'] = start
         variant_dict['end'] = end

@@ -1,37 +1,6 @@
 from re import split
 
-VCF_COLUMNS = [
-    'CHROM',
-    'POS',
-    'ID',
-    'REF',
-    'ALT',
-    'QUAL',
-    'FILTER'
-    'INFO',
-    'FORMAT',
-]
-
-ANN_FIELDS = [
-    'ALT',
-    'effect',
-    'impact',
-    'gene_name',
-    'gene_id',
-    'feature_type',
-    'feature_id',
-    'transcript_biotype',
-    'rank',
-    'hgvsc',
-    'hgvsp',
-    'cdna_position',
-    'cds_position',
-    'protein_position',
-    'distance_to_feature',
-    'error',
-]
-
-MUTATION_EFFECT_RANKING = [
+VARIANT_EFFECT_RANKING = [
     # Loss of transcript or exon
     'transcript_ablation',
     'exon_loss_variant',
@@ -118,9 +87,40 @@ MUTATION_EFFECT_RANKING = [
     'sequence_feature',
 ]
 
+VCF_COLUMNS = [
+    'CHROM',
+    'POS',
+    'ID',
+    'REF',
+    'ALT',
+    'QUAL',
+    'FILTER'
+    'INFO',
+    'FORMAT',
+]
+
+VCF_ANN_FIELDS = [
+    'ALT',
+    'effect',
+    'impact',
+    'gene_name',
+    'gene_id',
+    'feature_type',
+    'feature_id',
+    'transcript_biotype',
+    'rank',
+    'hgvsc',
+    'hgvsp',
+    'cdna_position',
+    'cds_position',
+    'protein_position',
+    'distance_to_feature',
+    'error',
+]
+
 
 # ==============================================================================
-#  Function on .VCF row
+#  Function on .VCF information
 # ==============================================================================
 def parse_vcf_row(vcf_row):
     """
@@ -148,7 +148,10 @@ def parse_vcf_row(vcf_row):
         if field == 'ANN':
             # Use 1st ANN
             a = value.split(',')[0].split('|')
-            variant_dict['ANN'] = {ANN_FIELDS[i]: a[i] for i in range(1, 15)}
+            variant_dict['ANN'] = {
+                VCF_ANN_FIELDS[i]: a[i]
+                for i in range(1, 15)
+            }
 
         else:
             variant_dict[field] = cast_vcf_field_value(field, value)
@@ -181,7 +184,7 @@ def parse_vcf_row(vcf_row):
     return variant_dict
 
 
-def get_infos(fields, vcf_row=None, info=None):
+def get_vcf_infos(fields, vcf_row=None, info=None):
     """
     Get fields from variant INFO.
     :param fields: iterable; of str
@@ -207,7 +210,7 @@ def get_infos(fields, vcf_row=None, info=None):
     return values
 
 
-def get_anns(fields, vcf_row=None, info=None):
+def get_vcf_anns(fields, vcf_row=None, info=None):
     """
     Get field from variant ANN.
     :param fields: iterable; of str: 'ALT' | 'effect' | 'impact' | 'gene_name'
@@ -219,17 +222,14 @@ def get_anns(fields, vcf_row=None, info=None):
     :return: list; of str field value
     """
 
-    ann = get_infos(['ANN'], vcf_row=vcf_row, info=info)[0]
+    ann = get_vcf_infos(['ANN'], vcf_row=vcf_row, info=info)[0]
 
     # Variant can have multiple ANNs, but use the 1st ANN
     ann_split = ann.split(',')[0].split('|')
 
-    return [ann_split[ANN_FIELDS.index(f)] for f in fields]
+    return [ann_split[VCF_ANN_FIELDS.index(f)] for f in fields]
 
 
-# ==============================================================================
-#  Function on .VCF row element
-# ==============================================================================
 def cast_vcf_field_value(field, value):
     """
     Cast .VCF field's value.
@@ -252,7 +252,10 @@ def cast_vcf_field_value(field, value):
         return value
 
 
-def get_variant_start_and_end_positions(pos, ref, alt):
+# ==============================================================================
+#  Function on variant information
+# ==============================================================================
+def get_start_and_end_positions(pos, ref, alt):
     """
     Get variant start and end position.
     :param ref: str; reference allele
@@ -272,6 +275,20 @@ def get_variant_start_and_end_positions(pos, ref, alt):
     return s, e
 
 
+def is_inframe(ref, alt):
+    """
+    Check whether ref-to-alt variant is inframe.
+    :param ref: str; reference allele
+    :param alt: str; alternate allele
+    :return: bool;
+    """
+
+    if (len(ref) - len(alt)) % 3:
+        return False
+    else:
+        return True
+
+
 def get_variant_type(ref, alt):
     """
     Get variant type.
@@ -281,29 +298,33 @@ def get_variant_type(ref, alt):
     """
 
     if len(ref) == len(alt):
+
         if len(ref) == 1:
-            vt = 'SNP'
+            variant_type = 'SNP'
+
         elif len(ref) == 2:
-            vt = 'DNP'
+            variant_type = 'DNP'
+
         elif len(ref) == 3:
-            vt = 'TNP'
+            variant_type = 'TNP'
+
         else:  # 4 <= len(ref)
-            vt = 'ONP'
+            variant_type = 'ONP'
 
     elif len(ref) < len(alt):
-        vt = 'INS'
+        variant_type = 'INS'
 
     else:  # len(alt) < len(ref)
-        vt = 'DEL'
+        variant_type = 'DEL'
 
-    return vt
+    return variant_type
 
 
 def get_genotype(format_, sample):
     """
     Get genotype.
-    :param format_: str; .VCF FORMAT column
-    :param sample: str; .VCF sample column
+    :param format_: str; .VCF FORMAT
+    :param sample: str; .VCF sample
     :return: str; '0|1' | '1|1'
     """
 
@@ -312,14 +333,14 @@ def get_genotype(format_, sample):
 
     for f, s in zip(format_split, sample_split):
         if f == 'GT':
-            return '{}|{}'.format(*cast_vcf_field_value(f, s))
+            return s.replace('/', '|')
 
 
 def get_allelic_frequencies(format_, sample):
     """
     Compute allelic frequency (INFO's AF is a rounded allelic frequency).
-    :param format_: str; .VCF FORMAT column
-    :param sample: str; .VCF sample column
+    :param format_: str; .VCF FORMAT
+    :param sample: str; .VCF sample
     :return: list; of allelic frequencies
     """
 
@@ -352,4 +373,4 @@ def describe_clnsig(clnsig):
         6: 'drug-response',
         7: 'histocompatibility',
         255: 'other',
-    }.get(clnsig)
+    }[clnsig]
