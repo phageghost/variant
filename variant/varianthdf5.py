@@ -6,7 +6,7 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_genotype, get_vcf_anns, get_vcf_infos,
+from .variant import (get_vcf_anns, get_vcf_formats, get_vcf_infos,
                       update_vcf_variant_dict)
 
 
@@ -171,8 +171,8 @@ class VariantHDF5:
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
 
-                    cursor['genotype'] = get_genotype(
-                        ref, alt, format_=format_, sample=sample)
+                    cursor['GT'] = get_vcf_formats(
+                        ['GT'], format_=format_, sample=sample)
 
                     cursor.append()
 
@@ -200,7 +200,7 @@ class VariantHDF5:
                             'effect',
                             'impact',
                             'gene_name',
-                            'genotype',
+                            'GT',
                     ]:
                         chrom_table.cols._f_col(col).create_csindex()
 
@@ -233,7 +233,7 @@ class VariantHDF5:
         impact = StringCol(8)
         gene_name = StringCol(16)
         # FORMAT & sample
-        genotype = StringCol(256)
+        GT = StringCol(8)
 
     def _read_id_to_chrom_dict(self):
         """
