@@ -5,6 +5,7 @@ from pickle import dump, load
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
+from .hdf5.hdf5.hdf5 import read_where_and_map_column_names
 from .vcf import (get_vcf_info, get_vcf_info_ann, get_vcf_sample_format,
                   update_vcf_variant_dict)
 
@@ -277,7 +278,7 @@ class VariantHDF5:
         """
         Get variants by id.
         :param id_: str; ID
-        :return: dict; {}
+        :return: list; of variant dict
         """
 
         chrom = self.id_to_chrom_dict.get(id_)
@@ -287,8 +288,8 @@ class VariantHDF5:
             chrom_table = self.variant_hdf5.get_node(
                 '/', 'chromosome_{}_variants'.format(chrom))
 
-            variant_dicts = self._read_where(chrom_table,
-                                             "ID == b'{}'".format(id_))
+            variant_dicts = read_where_and_map_column_names(
+                chrom_table, "ID == b'{}'".format(id_))
 
             for d in variant_dicts:
                 self._make_variant_dict_consistent(d)
@@ -300,7 +301,7 @@ class VariantHDF5:
         """
         Get variants by gene.
         :param gene: str; HGNC gene name
-        :return: dict; {}
+        :return: list; of variant dict
         """
 
         chrom = self.gene_to_chrom_dict.get(gene)
@@ -310,8 +311,8 @@ class VariantHDF5:
             chrom_table = self.variant_hdf5.get_node(
                 '/', 'chromosome_{}_variants'.format(chrom))
 
-            variant_dicts = self._read_where(chrom_table,
-                                             "gene_name == b'{}'".format(gene))
+            variant_dicts = read_where_and_map_column_names(
+                chrom_table, "gene_name == b'{}'".format(gene))
 
             for d in variant_dicts:
                 self._make_variant_dict_consistent(d)
@@ -326,13 +327,13 @@ class VariantHDF5:
         :param chrom: str; chromosome
         :param start: int; start position
         :param end: int; end position
-        :return: list; of dict; (n_results); [{column: value, ...}, ...]
+        :return: list; of variant dict
         """
 
         chrom_table = self.variant_hdf5.get_node(
             '/', 'chromosome_{}_variants'.format(chrom))
 
-        variant_dicts = self._read_where(
+        variant_dicts = read_where_and_map_column_names(
             chrom_table, '({} <= POS) & (POS <= {})'.format(start, end))
 
         for d in variant_dicts:
@@ -340,30 +341,6 @@ class VariantHDF5:
             update_vcf_variant_dict(d)
 
         return variant_dicts
-
-    def _read_where(self, hdf5_table, query):
-        """
-        Do hdf5_table.read_where(query) and map the results to column names.
-        :param hdf5_table: HDF5 Table
-        :param query: str; query
-        :return: list; of dict; (n_results); [{column: value, ...}, ...]
-        """
-
-        columns = hdf5_table.colnames
-
-        print('Reading {} where: {} ...'.format(hdf5_table.name, query))
-        dicts = []
-        for row in hdf5_table.read_where(query):
-
-            dict_ = {}
-            for c, v in zip(columns, row):
-                try:
-                    dict_[c] = v.decode()
-                except AttributeError:
-                    dict_[c] = v
-            dicts.append(dict_)
-
-        return dicts
 
     def _make_variant_dict_consistent(
             self,
