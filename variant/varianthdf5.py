@@ -6,7 +6,7 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_vcf_anns, get_vcf_formats, get_vcf_infos,
+from .variant import (get_vcf_ann, get_vcf_format, get_vcf_info,
                       update_vcf_variant_dict)
 
 
@@ -141,7 +141,8 @@ class VariantHDF5:
                             'chromosome_{}_variants'.format(chrom),
                             description=self._VariantDescription,
                             expectedrows=chrom_n_rows[chrom])
-                        print('\t\tMade {} table.'.format(chrom_table.name))
+                        print('\t\tMaking {} table ...'.format(
+                            chrom_table.name))
 
                         chrom_table_to_row_dict[chrom] = chrom_table.row
 
@@ -160,19 +161,31 @@ class VariantHDF5:
 
                     cursor['QUAL'] = qual
 
-                    clnsig = get_vcf_infos(['CLNSIG'], info=info)
+                    caf = get_vcf_info('CAF', info=info)
+                    clnsig = get_vcf_info('CLNSIG', info=info)
+                    clndbn = get_vcf_info('CLNDBN', info=info)
+
+                    cursor['CAF'] = caf
+
                     if clnsig:
                         clnsig = clnsig[0]
                         cursor['CLNSIG'] = clnsig
+                        try:
+                            cursor['CLNDBN'] = clndbn
+                        except TypeError:
+                            print('\tCLNDBN error with {}'.format(clndbn))
+                            pass
 
-                    effect, impact, gene_name = get_vcf_anns(
-                        ['effect', 'impact', 'gene_name'], info=info)
+                    effect = get_vcf_ann('effect', info=info)[0]
+                    impact = get_vcf_ann('impact', info=info)[0]
+                    gene_name = get_vcf_ann('gene_name', info=info)[0]
+
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
 
-                    cursor['GT'] = get_vcf_formats(
-                        ['GT'], format_=format_, sample=sample)
+                    cursor['GT'] = get_vcf_format(
+                        'GT', format_=format_, sample=sample)
 
                     cursor.append()
 
@@ -196,7 +209,9 @@ class VariantHDF5:
                             'REF',
                             'ALT',
                             'QUAL',
+                            'CAF',
                             'CLNSIG',
+                            'CLNDBN',
                             'effect',
                             'impact',
                             'gene_name',
@@ -227,7 +242,9 @@ class VariantHDF5:
         ALT = StringCol(256)
         QUAL = Float32Col()
         # INFO
+        CAF = StringCol(8)
         CLNSIG = StringCol(8)
+        CLNDBN = StringCol(16)
         # INFO ANN
         effect = StringCol(16)
         impact = StringCol(8)
@@ -313,7 +330,7 @@ class VariantHDF5:
 
             for d in variant_dicts:
                 self._make_variant_dict_consistent(d)
-                self._update_variant_dict(d)
+                update_vcf_variant_dict(d)
 
             return variant_dicts
 
@@ -335,7 +352,7 @@ class VariantHDF5:
 
         for d in variant_dicts:
             self._make_variant_dict_consistent(d)
-            self._update_variant_dict(d)
+            update_vcf_variant_dict(d)
 
         return variant_dicts
 
@@ -367,7 +384,7 @@ class VariantHDF5:
             self,
             variant_dict,
             ann_fields=('effect', 'impact', 'gene_name'),
-            sample_fields=('genotype', )):
+            sample_fields=('GT', )):
         """
         Update .VCF variant dict in place.
         :param dict; variant dict

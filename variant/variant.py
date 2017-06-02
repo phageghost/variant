@@ -210,8 +210,6 @@ def update_vcf_variant_dict(variant_dict):
     variant_dict['start'] = start
     variant_dict['end'] = end
 
-    variant_dict['confidence'] = 1 - 10**(-float(variant_dict['QUAL']) / 10)
-
     if 'CLNSIG' in variant_dict:
         variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
 
@@ -229,65 +227,56 @@ def update_vcf_variant_dict(variant_dict):
                                                                  d['DP'])
 
 
-def get_vcf_infos(fields, info):
+def get_vcf_info(field, info):
     """
-    Get fields from .VCF INFO.
-    :param fields: iterable; of str
+    Get field from .VCF INFO.
+    :param field: str; .VCF INFO field
     :param info: str; .VCF INFO
-    :return: list; of str field value
+    :return: str; field value
     """
 
-    values = []
     for i in info.split(';'):  # For each INFO
 
         if '=' not in i:  # Some fields are not in field=value format
             continue
 
-        field, value = i.split('=')
+        a_field, a_value = i.split('=')
 
-        if field in fields:
-            values.append(value)
-
-    return values
+        if a_field == field:
+            return a_value
 
 
-def get_vcf_anns(fields, info):
+def get_vcf_ann(field, info):
     """
-    Get fields from .VCF INFO ANN.
-    :param fields: iterable; of str: 'ALT' | 'effect' | 'impact' | 'gene_name'
+    Get field from .VCF INFO ANN.
+    :param field: str; 'ALT' | 'effect' | 'impact' | 'gene_name'
     | 'gene_id' | 'feature_type' | 'feature_id' | 'transcript_biotype' | 'rank'
     | 'hgvsc' | 'hgvsp' | 'cdna_position' | 'cds_position' | 'protein_position'
     | 'distance_to_feature'| 'error'
     :param info: str; .VCF INFO
-    :return: list; of list (ordered by ANN) of str field value
+    :return: list: (ordered by ANN) of str field value
     """
 
-    ann = get_vcf_infos(['ANN'], info).pop()
+    ann = get_vcf_info('ANN', info)
 
-    anns_values = []
+    i = VCF_ANN_FIELDS.index(field)
 
-    for a in ann.split(','):
-        a_split = a.split('|')
-
-        anns_values.append(
-            [a_split[VCF_ANN_FIELDS.index(field)] for field in fields])
-
-    return anns_values
+    return [a_split[i] for a_split in [a.split('|') for a in ann.split(',')]]
 
 
-def get_vcf_formats(fields, format_=None, sample=None):
+def get_vcf_format(field, format_=None, sample=None):
     """
-    Get fields' values from .VCF sample.
-    :param fields: iterable; of str; .VCF FORMAT fields
+    Get field from .VCF sample.
+    :param field: str; .VCF FORMAT field
     :param format: str; .VCF FORMAT
-    :param sample: iterable; of str; .VCF sample
-    :return: list; of str (field value)
+    :param sample: str; .VCF sample
+    :return: str; field value
     """
 
     format_split = format_.split(':')
     sample_split = sample.split(':')
 
-    return [sample_split[format_split.index(field)] for field in fields]
+    return sample_split[format_split.index(field)]
 
 
 def get_vcf_genotype(ref, alt, gt=None, format_=None, sample=None):
@@ -319,6 +308,16 @@ def get_vcf_allelic_frequencies(ad, dp):
     dp = int(dp)
 
     return [(int(an_ad) / dp) for an_ad in ad.split(',')]
+
+
+def get_vcf_population_allelic_frequencies(caf):
+    """
+    Compute allelic frequency (INFO's AF is a rounded allelic frequency).
+    :param caf: str; .VCF CAF
+    :return: list; of population allelic frequencies
+    """
+
+    return [int(a_caf) for a_caf in caf.split(',')]
 
 
 # ==============================================================================
@@ -398,6 +397,10 @@ def describe_clnsig(clnsig, clnsig_descriptions=CLNSIG_DESCRIPTIONS):
     :param clnsig: str; '|' separated: 0 | 1 | 2 | 4 | 5 | 6 | 7 | 255
     :return str; CLNSIG description
     """
+
+    if ',' in clnsig:
+        print('Bad CLNSIG {}.'.format(clnsig))
+        clnsig = clnsig.replace(',', '|').strip('|')
 
     return '|'.join([clnsig_descriptions[int(c)] for c in clnsig.split('|')])
 
@@ -530,8 +533,9 @@ def get_variant_classification(effect, ref, alt):
         variant_classification = 'Targeted_Region'
 
     else:
-        print('Unknown: effect={} & variant_type={} & inframe={}.'.format(
-            effect, variant_type, inframe))
+        print(
+            'No variant classification for: effect={} & variant_type={} & inframe={}.'.
+            format(effect, variant_type, inframe))
         variant_classification = 'Targeted_Region'
 
     return variant_classification
