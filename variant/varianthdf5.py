@@ -355,14 +355,11 @@ class VariantHDF5:
         :return: None
         """
 
-        for k in list(variant_dict.keys()):
-            if not variant_dict[k]:
-                del variant_dict[k]
-
         variant_dict['ANN'] = {
             0: {field: variant_dict.pop(field)
                 for field in ann_fields}
         }
+
         variant_dict['sample'] = {
             0: {field: variant_dict.pop(field)
                 for field in sample_fields}
