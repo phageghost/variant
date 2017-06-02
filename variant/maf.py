@@ -2,7 +2,7 @@ from numpy import empty
 from pandas import DataFrame, read_csv
 
 from .variant import (get_start_and_end_positions, get_variant_classification,
-                      get_variant_type, get_vcf_anns, is_inframe)
+                      get_variant_type, get_vcf_info_ann)
 
 
 def make_maf_from_vcf(vcf,
@@ -59,7 +59,7 @@ def make_maf_from_vcf(vcf,
     # Read ENSG-to-Entrez dict
     ensg_to_entrez_dict = read_csv(ensg_to_entrez, index_col=0).to_dict()
 
-    print('Iterating through VCF rows ...')
+    print('Iterating through .VCF rows ...')
     tmp = empty((vcf.shape[0], 10), dtype=object)
     for i, vcf_row in vcf.iterrows():  # For each VCF row
         if i % 1000 == 0:
@@ -69,17 +69,13 @@ def make_maf_from_vcf(vcf,
 
         start, end = get_start_and_end_positions(pos, ref, alt)
 
-        inframe = is_inframe(ref, alt)
+        effect = get_vcf_info_ann('effect', info=info)[0]
+        gene_name = get_vcf_info_ann('gene_name', info=info)[0]
+        gene_id = get_vcf_info_ann('gene_id', info=info)[0]
+        entrez_gene_id = ensg_to_entrez_dict.get(gene_id)
+        variant_classification = get_variant_classification(effect, ref, alt)
 
         variant_type = get_variant_type(ref, alt)
-
-        effect, gene_name, gene_id = get_vcf_anns(
-            ['effect', 'gene_name', 'gene_id'], info=info)
-
-        entrez_gene_id = ensg_to_entrez_dict.get(gene_id)
-
-        variant_classification = get_variant_classification(
-            effect, variant_type, inframe)
 
         tmp[i] = gene_name, entrez_gene_id, chrom, start, end, variant_classification, variant_type, id_, ref, alt
 
@@ -116,7 +112,8 @@ def get_mutsig_effect(variant_classification):
     """
     Convert .MAF variant classification to MUTSIG effect.
     :param variant_classification: str; .MAF variant classification
-    :return: str; 'noncoding' | 'null' | 'silent' | 'nonsilent' | 'effect'
+    :return: str; MUTSIG effect: 'noncoding' | 'null' | 'silent' | 'nonsilent'
+    | 'effect'
     """
 
     return {

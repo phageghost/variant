@@ -6,7 +6,7 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_vcf_ann, get_vcf_format, get_vcf_info,
+from .variant import (get_vcf_info, get_vcf_info_ann, get_vcf_sample_format,
                       update_vcf_variant_dict)
 
 
@@ -161,30 +161,24 @@ class VariantHDF5:
 
                     cursor['QUAL'] = qual
 
-                    caf = get_vcf_info('CAF', info=info)
-                    clnsig = get_vcf_info('CLNSIG', info=info)
-                    clndbn = get_vcf_info('CLNDBN', info=info)
+                    cursor['CAF'] = get_vcf_info('CAF', info=info)
+                    cursor['CLNSIG'] = get_vcf_info('CLNSIG', info=info)
 
-                    cursor['CAF'] = caf
+                    try:
+                        clndbn = get_vcf_info('CLNDBN', info=info)
+                        cursor['CLNDBN'] = clndbn
+                    except TypeError:
+                        print('\tCLNDBN error with {}'.format(clndbn))
 
-                    if clnsig:
-                        clnsig = clnsig[0]
-                        cursor['CLNSIG'] = clnsig
-                        try:
-                            cursor['CLNDBN'] = clndbn
-                        except TypeError:
-                            print('\tCLNDBN error with {}'.format(clndbn))
-                            pass
-
-                    effect = get_vcf_ann('effect', info=info)[0]
-                    impact = get_vcf_ann('impact', info=info)[0]
-                    gene_name = get_vcf_ann('gene_name', info=info)[0]
+                    effect = get_vcf_info_ann('effect', info=info)[0]
+                    impact = get_vcf_info_ann('impact', info=info)[0]
+                    gene_name = get_vcf_info_ann('gene_name', info=info)[0]
 
                     cursor['effect'] = effect
                     cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
 
-                    cursor['GT'] = get_vcf_format(
+                    cursor['GT'] = get_vcf_sample_format(
                         'GT', format_=format_, sample=sample)
 
                     cursor.append()
