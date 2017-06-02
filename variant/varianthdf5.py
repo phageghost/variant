@@ -49,7 +49,8 @@ class VariantHDF5:
 
     def _load_data(self, reset=False):
         """
-        Initialize self.variant_hdf5 & self.id_to_chrom_dict.
+        Initialize self.variant_hdf5 & self.id_to_chrom_dict &
+        self.gene_to_chrom_dict.
         :param reset: bool; re-make data instead of reading from files
         :return: None
         """
@@ -88,7 +89,7 @@ class VariantHDF5:
 
     def _make_variant_hdf5(self):
         """
-        Make .HDF5 storing variants.
+        Make variant .HDF5.
         :return: None
         """
 
@@ -155,13 +156,16 @@ class VariantHDF5:
                     cursor['ALT'] = alt
                     cursor['QUAL'] = qual
                     cursor['CAF'] = get_vcf_info('CAF', info=info)
-                    cursor['CLNSIG'] = get_vcf_info('CLNSIG', info=info)
-                    try:
-                        clndbn = get_vcf_info('CLNDBN', info=info)
-                        cursor['CLNDBN'] = clndbn
-                    except TypeError:
-                        # print('\tCLNDBN error with {}'.format(clndbn))
-                        pass
+                    clnsig = get_vcf_info('CLNSIG', info=info)
+                    if clnsig:
+                        cursor['CLNSIG'] = clnsig
+                    clndbn = get_vcf_info('CLNDBN', info=info)
+                    if clndbn:
+                        try:
+                            cursor['CLNDBN'] = clndbn
+                        except TypeError:
+                            # print('\tCLNDBN error with {}'.format(clndbn))
+                            pass
                     cursor['effect'] = get_vcf_info_ann('effect', info=info)[0]
                     cursor['impact'] = get_vcf_info_ann('impact', info=info)[0]
                     gene_name = get_vcf_info_ann('gene_name', info=info)[0]
@@ -171,7 +175,7 @@ class VariantHDF5:
 
                     cursor.append()
 
-                    # Update *-to-chromosome dictionaries
+                    # Update *-to-chromosome dict
                     if id_ != '.':
                         self.id_to_chrom_dict[id_] = chrom
 
@@ -215,8 +219,7 @@ class VariantHDF5:
         Describe VariantHDF5 table columns.
         """
 
-        # TODO: Refactor
-        # TODO: Match with VCF specification
+        # TODO: Optimize
         CHROM = StringCol(8)
         POS = Int32Col()
         ID = StringCol(16)

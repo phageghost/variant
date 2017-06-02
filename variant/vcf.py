@@ -185,14 +185,15 @@ def get_vcf_info(field, info):
                 return a_value
 
 
-def get_vcf_info_ann(field, info):
+def get_vcf_info_ann(field, info, n_ann=1):
     """
     Get .VCF INFO ANN field value.
     :param field: str; .VCF INFO ANN field: 'ALT' | 'effect' | 'impact' |
-    'gene_name' | 'gene_id' | 'feature_type' | 'feature_id' |
-    'transcript_biotype' | 'rank' | 'hgvsc' | 'hgvsp' | 'cdna_position' |
-    'cds_position' | 'protein_position' | 'distance_to_feature'| 'error'
+        'gene_name' | 'gene_id' | 'feature_type' | 'feature_id' |
+        'transcript_biotype' | 'rank' | 'hgvsc' | 'hgvsp' | 'cdna_position' |
+        'cds_position' | 'protein_position' | 'distance_to_feature'| 'error'
     :param info: str; .VCF INFO
+    :param n_ann: int; number of ANN to parse
     :return: list: of str .VCF INFO ANN field value; ordered by ANN appearance
     """
 
@@ -200,7 +201,10 @@ def get_vcf_info_ann(field, info):
 
     i = VCF_ANN_FIELDS.index(field)
 
-    return [a_split[i] for a_split in [a.split('|') for a in ann.split(',')]]
+    return [
+        a_split[i]
+        for a_split in [a.split('|') for a in ann.split(',')[:n_ann]]
+    ]
 
 
 def get_vcf_sample_format(field, format_=None, sample=None):
