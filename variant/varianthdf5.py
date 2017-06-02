@@ -1,7 +1,6 @@
 from collections import defaultdict
 from gzip import open
 from pickle import dump, load
-from pprint import pprint
 
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
@@ -114,7 +113,6 @@ class VariantHDF5:
 
                 chrom_n_rows[a_chrom] += 1
                 line = f.readline()
-            pprint(chrom_n_rows)
 
             print('Making variant HDF5 ...')
             with open_file(
@@ -162,7 +160,8 @@ class VariantHDF5:
                         clndbn = get_vcf_info('CLNDBN', info=info)
                         cursor['CLNDBN'] = clndbn
                     except TypeError:
-                        print('\tCLNDBN error with {}'.format(clndbn))
+                        # print('\tCLNDBN error with {}'.format(clndbn))
+                        pass
                     cursor['effect'] = get_vcf_info_ann('effect', info=info)[0]
                     cursor['impact'] = get_vcf_info_ann('impact', info=info)[0]
                     gene_name = get_vcf_info_ann('gene_name', info=info)[0]
