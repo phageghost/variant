@@ -70,7 +70,7 @@ class VariantHDF5:
                 print('\tgene-to-chromosome dict ...')
                 self._read_gene_to_chrom_dict()
 
-            except (FileNotFoundError, HDF5ExtError) as e:
+            except (OSError, FileNotFoundError, HDF5ExtError) as e:
                 print('\tFailed: {}.'.format(e))
                 reset = True
 
@@ -106,13 +106,13 @@ class VariantHDF5:
             chrom_n_rows = defaultdict(lambda: 0)
             chrom = None
             while line:
-                a_chrom = line.split('\t')[0]
 
+                a_chrom = line.split('\t')[0]
                 if a_chrom != chrom:
                     print('\t@ {} ...'.format(a_chrom))
                     chrom = a_chrom
-
                 chrom_n_rows[a_chrom] += 1
+
                 line = f.readline()
 
             print('Making variant HDF5 ...')
