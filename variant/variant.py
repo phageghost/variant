@@ -175,10 +175,6 @@ def describe_clnsig(clnsig, clnsig_descriptions=CLNSIG_DESCRIPTIONS):
     :return list; of str; CLNSIG descriptions
     """
 
-    if ',' in clnsig:
-        print('Bad CLNSIG {}.'.format(clnsig))
-        clnsig = clnsig.replace(',', '|').strip('|')
-
     return [clnsig_descriptions[int(c)] for c in clnsig.split('|')]
 
 

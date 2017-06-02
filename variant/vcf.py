@@ -151,7 +151,17 @@ def update_vcf_variant_dict(variant_dict):
     variant_dict['end'] = end
 
     if 'CLNSIG' in variant_dict:
-        variant_dict['clinvar'] = describe_clnsig(variant_dict['CLNSIG'])
+        clnsig = variant_dict['CLNSIG']
+
+        if ',' in clnsig:
+            print('Bad CLNSIG {}.'.format(clnsig))
+            clnsig = clnsig.replace(',', '|')
+
+        if clnsig.startswith('|') or clnsig.endswith('|'):
+            print('Bad CLNSIG {}.'.format(clnsig))
+            clnsig = clnsig.strip('|')
+
+        variant_dict['clinvar'] = describe_clnsig(clnsig)
 
     for i, d in variant_dict['ANN'].items():
         d['variant_classification'] = get_variant_classification(d['effect'],
