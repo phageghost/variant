@@ -6,8 +6,8 @@ from pprint import pprint
 from tables import (Filters, Float32Col, HDF5ExtError, Int32Col, IsDescription,
                     StringCol, open_file)
 
-from .variant import (get_vcf_info, get_vcf_info_ann, get_vcf_sample_format,
-                      update_vcf_variant_dict)
+from .vcf import (get_vcf_info, get_vcf_info_ann, get_vcf_sample_format,
+                  update_vcf_variant_dict)
 
 
 class VariantHDF5:
@@ -15,21 +15,21 @@ class VariantHDF5:
     Data structure storing variants in .HDF5.
     """
 
-    def __init__(self, variant_file_path, reset=False):
+    def __init__(self, vcf_file_path, reset=False):
         """
         Construct VariantHDF5.
-        :param variant_file_path: str; file path to .VCF
+        :param vcf_file_path: str; .VCF file path
         :param reset: bool; re-make data instead of reading from files
         :return: None
         """
 
         # File paths
-        self.variant_file_path = variant_file_path
-        self.variant_hdf5_file_path = '{}.hdf5'.format(self.variant_file_path)
+        self.vcf_file_path = vcf_file_path
+        self.variant_hdf5_file_path = '{}.hdf5'.format(self.vcf_file_path)
         self.id_to_chrom_dict_file_path = '{}.id_to_chrom_dict.pickle.gz'.format(
-            self.variant_file_path)
+            self.vcf_file_path)
         self.gene_to_chrom_dict_file_path = '{}.gene_to_chrom_dict.pickle.gz'.format(
-            self.variant_file_path)
+            self.vcf_file_path)
 
         # Data
         self.variant_hdf5 = None
@@ -58,14 +58,16 @@ class VariantHDF5:
         if not reset:
 
             try:
-                print('Reading variant HDF5 ...')
+                print('Reading ...')
+
+                print('\tVariant HDF5 ...')
                 self.variant_hdf5 = open_file(
                     self.variant_hdf5_file_path, mode='r')
 
-                print('Reading ID-to-chromosome dict ...')
+                print('\tID-to-chromosome dict ...')
                 self._read_id_to_chrom_dict()
 
-                print('Reading gene-to-chromosome dict ...')
+                print('\tgene-to-chromosome dict ...')
                 self._read_gene_to_chrom_dict()
 
             except (FileNotFoundError, HDF5ExtError) as e:
@@ -79,7 +81,6 @@ class VariantHDF5:
                 self.variant_hdf5.close()
                 print('Closed variant HDF5.')
 
-            print('Making variant HDF5 ...')
             self._make_variant_hdf5()
 
             print('Reading variant HDF5 ...')
@@ -92,7 +93,7 @@ class VariantHDF5:
         :return: None
         """
 
-        with open(self.variant_file_path, 'rt') as f:
+        with open(self.vcf_file_path, 'rt') as f:
 
             print('Getting data-start position ...')
             data_start_position = None
@@ -101,7 +102,7 @@ class VariantHDF5:
                 data_start_position = f.tell()
                 line = f.readline()
 
-            print('Counting variants in chromosomes ...')
+            print('Counting variants per chromosome ...')
             chrom_n_rows = defaultdict(lambda: 0)
             chrom = None
             while line:
@@ -150,34 +151,22 @@ class VariantHDF5:
                     cursor = chrom_table_to_row_dict[chrom]
 
                     cursor['CHROM'] = chrom
-
                     cursor['POS'] = pos
-
                     cursor['ID'] = id_
-
                     cursor['REF'] = ref
-
                     cursor['ALT'] = alt
-
                     cursor['QUAL'] = qual
-
                     cursor['CAF'] = get_vcf_info('CAF', info=info)
                     cursor['CLNSIG'] = get_vcf_info('CLNSIG', info=info)
-
                     try:
                         clndbn = get_vcf_info('CLNDBN', info=info)
                         cursor['CLNDBN'] = clndbn
                     except TypeError:
                         print('\tCLNDBN error with {}'.format(clndbn))
-
-                    effect = get_vcf_info_ann('effect', info=info)[0]
-                    impact = get_vcf_info_ann('impact', info=info)[0]
+                    cursor['effect'] = get_vcf_info_ann('effect', info=info)[0]
+                    cursor['impact'] = get_vcf_info_ann('impact', info=info)[0]
                     gene_name = get_vcf_info_ann('gene_name', info=info)[0]
-
-                    cursor['effect'] = effect
-                    cursor['impact'] = impact
                     cursor['gene_name'] = gene_name
-
                     cursor['GT'] = get_vcf_sample_format(
                         'GT', format_=format_, sample=sample)
 
@@ -189,11 +178,11 @@ class VariantHDF5:
 
                     self.gene_to_chrom_dict[gene_name] = chrom
 
-                print('Flushing tables and making column indices ...')
+                print('\tFlushing tables and making column indices ...')
                 for chrom in chrom_table_to_row_dict:
                     chrom_table = variant_hdf5.get_node(
                         '/', 'chromosome_{}_variants'.format(chrom))
-                    print('\t{} table ...'.format(chrom_table.name))
+                    print('\t\t{} table ...'.format(chrom_table.name))
                     chrom_table.flush()
 
                     for col in [
@@ -236,13 +225,13 @@ class VariantHDF5:
         ALT = StringCol(256)
         QUAL = Float32Col()
         # INFO
-        CAF = StringCol(8)
+        CAF = StringCol(16)
         CLNSIG = StringCol(8)
-        CLNDBN = StringCol(16)
+        CLNDBN = StringCol(256)
         # INFO ANN
-        effect = StringCol(16)
-        impact = StringCol(8)
-        gene_name = StringCol(16)
+        effect = StringCol(32)
+        impact = StringCol(32)
+        gene_name = StringCol(32)
         # FORMAT & sample
         GT = StringCol(8)
 
