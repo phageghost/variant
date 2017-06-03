@@ -293,7 +293,7 @@ class VariantHDF5:
             if 1 < len(variant_dicts):
                 raise ValueError('Found 1 < variants with id {}.'.format(id_))
 
-            variant_dict = variant_dicts.popitem()
+            variant_dict = variant_dicts.pop()
             self._make_variant_dict_consistent(variant_dict)
             update_vcf_variant_dict(variant_dict)
 
