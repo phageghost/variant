@@ -271,8 +271,8 @@ def get_vcf_population_allelic_frequencies(caf):
     :return: list; (n_alleles); of .VCF population allelic frequencies
     """
 
-    if caf.endswith('.'):
+    try:
+        return [float(a_caf) for a_caf in caf.split(',')]
+    except ValueError:
         print('Bad CAF {}.'.format(caf))
-        caf = caf.strip('.')
-
-    return [float(a_caf) for a_caf in caf.split(',')]
+        return [float(a_caf) for a_caf in caf.strip('.').strip(',').split(',')]
