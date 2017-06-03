@@ -165,8 +165,7 @@ class VariantHDF5:
                         try:
                             cursor['CLNDBN'] = clndbn
                         except TypeError:
-                            # print('\tCLNDBN error with {}'.format(clndbn))
-                            pass
+                            print('\tCLNDBN error with {}'.format(clndbn))
                     cursor['effect'] = get_vcf_info_ann('effect', info=info)[0]
                     cursor['impact'] = get_vcf_info_ann('impact', info=info)[0]
                     gene_name = get_vcf_info_ann('gene_name', info=info)[0]
@@ -278,7 +277,7 @@ class VariantHDF5:
         """
         Get variants by id.
         :param id_: str; ID
-        :return: list; of variant dict
+        :return: dict; variant dict
         """
 
         chrom = self.id_to_chrom_dict.get(id_)
@@ -291,11 +290,14 @@ class VariantHDF5:
             variant_dicts = read_where_and_map_column_names(
                 chrom_table, "ID == b'{}'".format(id_))
 
-            for d in variant_dicts:
-                self._make_variant_dict_consistent(d)
-                update_vcf_variant_dict(d)
+            if 1 < len(variant_dicts):
+                raise ValueError('Found 1 < variants with id {}.'.format(id_))
 
-            return variant_dicts
+            variant_dict = variant_dicts.popitem()
+            self._make_variant_dict_consistent(variant_dict)
+            update_vcf_variant_dict(variant_dict)
+
+            return variant_dict
 
     def get_variants_by_gene(self, gene):
         """
@@ -357,9 +359,7 @@ class VariantHDF5:
 
         # Remove field with value: None | ''
         for k in list(variant_dict.keys()):
-            print(k, variant_dict[k])
             if not variant_dict[k]:
-                print('*')
                 del variant_dict[k]
 
         variant_dict['ANN'] = {
