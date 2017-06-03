@@ -275,4 +275,6 @@ def get_vcf_population_allelic_frequencies(caf):
         return [float(a_caf) for a_caf in caf.split(',')]
     except ValueError:
         print('Strange CAF {}.'.format(caf))
-        return [float(a_caf) for a_caf in caf.split(',') if a_caf != '.']
+        return [
+            float(a_caf) for a_caf in caf.split(',') if a_cat and a_caf != '.'
+        ]
