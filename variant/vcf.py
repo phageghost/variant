@@ -150,6 +150,10 @@ def update_vcf_variant_dict(variant_dict):
     variant_dict['start'] = start
     variant_dict['end'] = end
 
+    if 'CAF' in variant_dict:
+        variant_dict[
+            'population_allelic_frequencies'] = get_vcf_population_allelic_frequencies(
+                variant_dict['CAF'])
     if 'CLNSIG' in variant_dict:
         clnsig = variant_dict['CLNSIG']
 

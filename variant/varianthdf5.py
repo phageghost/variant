@@ -156,7 +156,9 @@ class VariantHDF5:
                     cursor['REF'] = ref
                     cursor['ALT'] = alt
                     cursor['QUAL'] = qual
-                    cursor['CAF'] = get_vcf_info('CAF', info=info)
+                    caf = get_vcf_info('CAF', info=info)
+                    if caf:
+                        cursor['CAF'] = caf
                     clnsig = get_vcf_info('CLNSIG', info=info)
                     if clnsig:
                         cursor['CLNSIG'] = clnsig
