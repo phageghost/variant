@@ -20,7 +20,7 @@ class VariantHDF5:
         Construct VariantHDF5.
         :param vcf_file_path: str; .VCF file path
         :param reset: bool; re-make data instead of reading from files
-        :return: None
+        :return: VariantHDF5
         """
 
         # File paths
@@ -301,6 +301,9 @@ class VariantHDF5:
 
             return variant_dict
 
+        else:
+            return {}
+
     def get_variants_by_gene(self, gene):
         """
         Get variants by gene.
@@ -323,6 +326,9 @@ class VariantHDF5:
                 update_vcf_variant_dict(d)
 
             return variant_dicts
+
+        else:
+            return {}
 
     def get_variants_by_region(self, chrom, start, end):
         """
